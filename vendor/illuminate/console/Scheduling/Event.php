@@ -12,21 +12,18 @@ use Illuminate\Contracts\Mail\Mailer;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Reflector;
-use Illuminate\Support\Stringable;
 use Illuminate\Support\Traits\Macroable;
-use Illuminate\Support\Traits\ReflectsClosures;
 use Psr\Http\Client\ClientExceptionInterface;
 use Symfony\Component\Process\Process;
-use Throwable;
 
 class Event
 {
-    use Macroable, ManagesFrequencies, ReflectsClosures;
+    use Macroable, ManagesFrequencies;
 
     /**
      * The command string.
      *
-     * @var string|null
+     * @var string
      */
     public $command;
 
@@ -47,7 +44,7 @@ class Event
     /**
      * The user the command should run as.
      *
-     * @var string|null
+     * @var string
      */
     public $user;
 
@@ -80,14 +77,14 @@ class Event
     public $onOneServer = false;
 
     /**
-     * The number of minutes the mutex should be valid.
+     * The amount of time the mutex should be valid.
      *
      * @var int
      */
     public $expiresAt = 1440;
 
     /**
-     * Indicates if the command should run in the background.
+     * Indicates if the command should run in background.
      *
      * @var bool
      */
@@ -138,7 +135,7 @@ class Event
     /**
      * The human readable description of the event.
      *
-     * @var string|null
+     * @var string
      */
     public $description;
 
@@ -148,13 +145,6 @@ class Event
      * @var \Illuminate\Console\Scheduling\EventMutex
      */
     public $mutex;
-
-    /**
-     * The mutex name resolver callback.
-     *
-     * @var \Closure|null
-     */
-    public $mutexNameResolver;
 
     /**
      * The exit status code of the command.
@@ -195,82 +185,55 @@ class Event
      *
      * @param  \Illuminate\Contracts\Container\Container  $container
      * @return void
-     *
-     * @throws \Throwable
      */
     public function run(Container $container)
     {
-        if ($this->shouldSkipDueToOverlapping()) {
+        if ($this->withoutOverlapping &&
+            ! $this->mutex->create($this)) {
             return;
         }
 
-        $exitCode = $this->start($container);
-
-        if (! $this->runInBackground) {
-            $this->finish($container, $exitCode);
-        }
+        $this->runInBackground
+                    ? $this->runCommandInBackground($container)
+                    : $this->runCommandInForeground($container);
     }
 
     /**
-     * Determine if the event should skip because another process is overlapping.
+     * Get the mutex name for the scheduled command.
      *
-     * @return bool
+     * @return string
      */
-    public function shouldSkipDueToOverlapping()
+    public function mutexName()
     {
-        return $this->withoutOverlapping && ! $this->mutex->create($this);
+        return 'framework'.DIRECTORY_SEPARATOR.'schedule-'.sha1($this->expression.$this->command);
     }
 
     /**
-     * Run the command process.
+     * Run the command in the foreground.
      *
      * @param  \Illuminate\Contracts\Container\Container  $container
-     * @return int
-     *
-     * @throws \Throwable
-     */
-    protected function start($container)
-    {
-        try {
-            $this->callBeforeCallbacks($container);
-
-            return $this->execute($container);
-        } catch (Throwable $exception) {
-            $this->removeMutex();
-
-            throw $exception;
-        }
-    }
-
-    /**
-     * Run the command process.
-     *
-     * @param  \Illuminate\Contracts\Container\Container  $container
-     * @return int
-     */
-    protected function execute($container)
-    {
-        return Process::fromShellCommandline(
-            $this->buildCommand(), base_path(), null, null, null
-        )->run();
-    }
-
-    /**
-     * Mark the command process as finished and run callbacks/cleanup.
-     *
-     * @param  \Illuminate\Contracts\Container\Container  $container
-     * @param  int  $exitCode
      * @return void
      */
-    public function finish(Container $container, $exitCode)
+    protected function runCommandInForeground(Container $container)
     {
-        $this->exitCode = (int) $exitCode;
+        $this->callBeforeCallbacks($container);
 
-        try {
-            $this->callAfterCallbacks($container);
-        } finally {
-            $this->removeMutex();
-        }
+        $this->exitCode = Process::fromShellCommandline($this->buildCommand(), base_path(), null, null, null)->run();
+
+        $this->callAfterCallbacks($container);
+    }
+
+    /**
+     * Run the command in the background.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     * @return void
+     */
+    protected function runCommandInBackground(Container $container)
+    {
+        $this->callBeforeCallbacks($container);
+
+        Process::fromShellCommandline($this->buildCommand(), base_path(), null, null, null)->run();
     }
 
     /**
@@ -297,6 +260,20 @@ class Event
         foreach ($this->afterCallbacks as $callback) {
             $container->call($callback);
         }
+    }
+
+    /**
+     * Call all of the "after" callbacks for the event.
+     *
+     * @param  \Illuminate\Contracts\Container\Container  $container
+     * @param  int  $exitCode
+     * @return void
+     */
+    public function callAfterCallbacksWithExitCode(Container $container, $exitCode)
+    {
+        $this->exitCode = (int) $exitCode;
+
+        $this->callAfterCallbacks($container);
     }
 
     /**
@@ -348,7 +325,7 @@ class Event
             $date = $date->setTimezone($this->timezone);
         }
 
-        return (new CronExpression($this->expression))->isDue($date->toDateTimeString());
+        return CronExpression::factory($this->expression)->isDue($date->toDateTimeString());
     }
 
     /**
@@ -496,7 +473,7 @@ class Event
      */
     protected function emailOutput(Mailer $mailer, $addresses, $onlyIfOutputExists = false)
     {
-        $text = is_file($this->output) ? file_get_contents($this->output) : '';
+        $text = file_exists($this->output) ? file_get_contents($this->output) : '';
 
         if ($onlyIfOutputExists && empty($text)) {
             return;
@@ -599,7 +576,7 @@ class Event
     {
         return function (Container $container, HttpClient $http) use ($url) {
             try {
-                $http->request('GET', $url);
+                $http->get($url);
             } catch (ClientExceptionInterface|TransferException $e) {
                 $container->make(ExceptionHandler::class)->report($e);
             }
@@ -607,7 +584,7 @@ class Event
     }
 
     /**
-     * State that the command should run in the background.
+     * State that the command should run in background.
      *
      * @return $this
      */
@@ -659,8 +636,6 @@ class Event
     /**
      * Do not allow the event to overlap each other.
      *
-     * The expiration time of the underlying cache lock may be specified in minutes.
-     *
      * @param  int  $expiresAt
      * @return $this
      */
@@ -670,7 +645,9 @@ class Event
 
         $this->expiresAt = $expiresAt;
 
-        return $this->skip(function () {
+        return $this->then(function () {
+            $this->mutex->forget($this);
+        })->skip(function () {
             return $this->mutex->exists($this);
         });
     }
@@ -749,29 +726,9 @@ class Event
      */
     public function then(Closure $callback)
     {
-        $parameters = $this->closureParameterTypes($callback);
-
-        if (Arr::get($parameters, 'output') === Stringable::class) {
-            return $this->thenWithOutput($callback);
-        }
-
         $this->afterCallbacks[] = $callback;
 
         return $this;
-    }
-
-    /**
-     * Register a callback that uses the output after the job runs.
-     *
-     * @param  \Closure  $callback
-     * @param  bool  $onlyIfOutputExists
-     * @return $this
-     */
-    public function thenWithOutput(Closure $callback, $onlyIfOutputExists = false)
-    {
-        $this->ensureOutputIsBeingCaptured();
-
-        return $this->then($this->withOutputCallback($callback, $onlyIfOutputExists));
     }
 
     /**
@@ -782,31 +739,11 @@ class Event
      */
     public function onSuccess(Closure $callback)
     {
-        $parameters = $this->closureParameterTypes($callback);
-
-        if (Arr::get($parameters, 'output') === Stringable::class) {
-            return $this->onSuccessWithOutput($callback);
-        }
-
         return $this->then(function (Container $container) use ($callback) {
-            if ($this->exitCode === 0) {
+            if (0 === $this->exitCode) {
                 $container->call($callback);
             }
         });
-    }
-
-    /**
-     * Register a callback that uses the output if the operation succeeds.
-     *
-     * @param  \Closure  $callback
-     * @param  bool  $onlyIfOutputExists
-     * @return $this
-     */
-    public function onSuccessWithOutput(Closure $callback, $onlyIfOutputExists = false)
-    {
-        $this->ensureOutputIsBeingCaptured();
-
-        return $this->onSuccess($this->withOutputCallback($callback, $onlyIfOutputExists));
     }
 
     /**
@@ -817,49 +754,11 @@ class Event
      */
     public function onFailure(Closure $callback)
     {
-        $parameters = $this->closureParameterTypes($callback);
-
-        if (Arr::get($parameters, 'output') === Stringable::class) {
-            return $this->onFailureWithOutput($callback);
-        }
-
         return $this->then(function (Container $container) use ($callback) {
-            if ($this->exitCode !== 0) {
+            if (0 !== $this->exitCode) {
                 $container->call($callback);
             }
         });
-    }
-
-    /**
-     * Register a callback that uses the output if the operation fails.
-     *
-     * @param  \Closure  $callback
-     * @param  bool  $onlyIfOutputExists
-     * @return $this
-     */
-    public function onFailureWithOutput(Closure $callback, $onlyIfOutputExists = false)
-    {
-        $this->ensureOutputIsBeingCaptured();
-
-        return $this->onFailure($this->withOutputCallback($callback, $onlyIfOutputExists));
-    }
-
-    /**
-     * Get a callback that provides output.
-     *
-     * @param  \Closure  $callback
-     * @param  bool  $onlyIfOutputExists
-     * @return \Closure
-     */
-    protected function withOutputCallback(Closure $callback, $onlyIfOutputExists = false)
-    {
-        return function (Container $container) use ($callback, $onlyIfOutputExists) {
-            $output = $this->output && is_file($this->output) ? file_get_contents($this->output) : '';
-
-            return $onlyIfOutputExists && empty($output)
-                            ? null
-                            : $container->call($callback, ['output' => new Stringable($output)]);
-        };
     }
 
     /**
@@ -910,8 +809,9 @@ class Event
      */
     public function nextRunDate($currentTime = 'now', $nth = 0, $allowCurrentDate = false)
     {
-        return Date::instance((new CronExpression($this->getExpression()))
-            ->getNextRunDate($currentTime, $nth, $allowCurrentDate, $this->timezone));
+        return Date::instance(CronExpression::factory(
+            $this->getExpression()
+        )->getNextRunDate($currentTime, $nth, $allowCurrentDate, $this->timezone));
     }
 
     /**
@@ -935,46 +835,5 @@ class Event
         $this->mutex = $mutex;
 
         return $this;
-    }
-
-    /**
-     * Get the mutex name for the scheduled command.
-     *
-     * @return string
-     */
-    public function mutexName()
-    {
-        $mutexNameResolver = $this->mutexNameResolver;
-
-        if (! is_null($mutexNameResolver) && is_callable($mutexNameResolver)) {
-            return $mutexNameResolver($this);
-        }
-
-        return 'framework'.DIRECTORY_SEPARATOR.'schedule-'.sha1($this->expression.$this->command);
-    }
-
-    /**
-     * Set the mutex name or name resolver callback.
-     *
-     * @param  \Closure|string  $mutexName
-     * @return $this
-     */
-    public function createMutexNameUsing(Closure|string $mutexName)
-    {
-        $this->mutexNameResolver = is_string($mutexName) ? fn () => $mutexName : $mutexName;
-
-        return $this;
-    }
-
-    /**
-     * Delete the mutex for the event.
-     *
-     * @return void
-     */
-    protected function removeMutex()
-    {
-        if ($this->withoutOverlapping) {
-            $this->mutex->forget($this);
-        }
     }
 }

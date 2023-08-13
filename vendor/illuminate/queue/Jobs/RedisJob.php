@@ -85,7 +85,7 @@ class RedisJob extends Job implements JobContract
     }
 
     /**
-     * Release the job back into the queue after (n) seconds.
+     * Release the job back into the queue.
      *
      * @param  int  $delay
      * @return void
@@ -110,7 +110,7 @@ class RedisJob extends Job implements JobContract
     /**
      * Get the job identifier.
      *
-     * @return string|null
+     * @return string
      */
     public function getJobId()
     {

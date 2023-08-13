@@ -6,6 +6,7 @@ use Faker\Factory as FakerFactory;
 use Faker\Generator as FakerGenerator;
 use Illuminate\Contracts\Queue\EntityResolver;
 use Illuminate\Database\Connectors\ConnectionFactory;
+use Illuminate\Database\Eloquent\Factory as EloquentFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\QueueEntityResolver;
 use Illuminate\Support\ServiceProvider;
@@ -41,7 +42,9 @@ class DatabaseServiceProvider extends ServiceProvider
         Model::clearBootedModels();
 
         $this->registerConnectionServices();
+
         $this->registerEloquentFactory();
+
         $this->registerQueueableEntityResolver();
     }
 
@@ -69,14 +72,6 @@ class DatabaseServiceProvider extends ServiceProvider
         $this->app->bind('db.connection', function ($app) {
             return $app['db']->connection();
         });
-
-        $this->app->bind('db.schema', function ($app) {
-            return $app['db']->connection()->getSchemaBuilder();
-        });
-
-        $this->app->singleton('db.transactions', function ($app) {
-            return new DatabaseTransactionsManager;
-        });
     }
 
     /**
@@ -96,6 +91,12 @@ class DatabaseServiceProvider extends ServiceProvider
             static::$fakers[$locale]->unique(true);
 
             return static::$fakers[$locale];
+        });
+
+        $this->app->singleton(EloquentFactory::class, function ($app) {
+            return EloquentFactory::construct(
+                $app->make(FakerGenerator::class), $this->app->databasePath('factories')
+            );
         });
     }
 

@@ -26,10 +26,12 @@ interface ExtractorInterface
      *
      * @param string|iterable<string> $resource Files, a file or a directory
      */
-    public function extract(string|iterable $resource, MessageCatalogue $catalogue);
+    public function extract($resource, MessageCatalogue $catalogue);
 
     /**
      * Sets the prefix that should be used for new found messages.
+     *
+     * @param string $prefix The prefix
      */
-    public function setPrefix(string $prefix);
+    public function setPrefix($prefix);
 }

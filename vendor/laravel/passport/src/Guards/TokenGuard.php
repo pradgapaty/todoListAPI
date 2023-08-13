@@ -4,31 +4,22 @@ namespace Laravel\Passport\Guards;
 
 use Exception;
 use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
-use Illuminate\Auth\GuardHelpers;
 use Illuminate\Container\Container;
-use Illuminate\Contracts\Auth\Guard;
+use Illuminate\Contracts\Auth\UserProvider;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Encryption\Encrypter;
-use Illuminate\Cookie\CookieValuePrefix;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Http\Request;
-use Illuminate\Support\Traits\Macroable;
-use Laravel\Passport\Client;
 use Laravel\Passport\ClientRepository;
 use Laravel\Passport\Passport;
-use Laravel\Passport\PassportUserProvider;
 use Laravel\Passport\TokenRepository;
 use Laravel\Passport\TransientToken;
 use League\OAuth2\Server\Exception\OAuthServerException;
 use League\OAuth2\Server\ResourceServer;
-use Nyholm\Psr7\Factory\Psr17Factory;
-use Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory;
+use Symfony\Bridge\PsrHttpMessage\Factory\DiactorosFactory;
 
-class TokenGuard implements Guard
+class TokenGuard
 {
-    use GuardHelpers, Macroable;
-
     /**
      * The resource server instance.
      *
@@ -39,7 +30,7 @@ class TokenGuard implements Guard
     /**
      * The user provider implementation.
      *
-     * @var \Laravel\Passport\PassportUserProvider
+     * @var \Illuminate\Contracts\Auth\UserProvider
      */
     protected $provider;
 
@@ -65,104 +56,62 @@ class TokenGuard implements Guard
     protected $encrypter;
 
     /**
-     * The request instance.
-     *
-     * @var \Illuminate\Http\Request
-     */
-    protected $request;
-
-    /**
-     * The currently authenticated client.
-     *
-     * @var \Laravel\Passport\Client|null
-     */
-    protected $client;
-
-    /**
      * Create a new token guard instance.
      *
      * @param  \League\OAuth2\Server\ResourceServer  $server
-     * @param  \Laravel\Passport\PassportUserProvider  $provider
+     * @param  \Illuminate\Contracts\Auth\UserProvider  $provider
      * @param  \Laravel\Passport\TokenRepository  $tokens
      * @param  \Laravel\Passport\ClientRepository  $clients
      * @param  \Illuminate\Contracts\Encryption\Encrypter  $encrypter
-     * @param  \Illuminate\Http\Request  $request
      * @return void
      */
-    public function __construct(
-        ResourceServer $server,
-        PassportUserProvider $provider,
-        TokenRepository $tokens,
-        ClientRepository $clients,
-        Encrypter $encrypter,
-        Request $request
-    ) {
+    public function __construct(ResourceServer $server,
+                                UserProvider $provider,
+                                TokenRepository $tokens,
+                                ClientRepository $clients,
+                                Encrypter $encrypter)
+    {
         $this->server = $server;
         $this->tokens = $tokens;
         $this->clients = $clients;
         $this->provider = $provider;
         $this->encrypter = $encrypter;
-        $this->request = $request;
     }
 
     /**
      * Get the user for the incoming request.
      *
+     * @param  \Illuminate\Http\Request  $request
      * @return mixed
      */
-    public function user()
+    public function user(Request $request)
     {
-        if (! is_null($this->user)) {
-            return $this->user;
+        if ($request->bearerToken()) {
+            return $this->authenticateViaBearerToken($request);
+        } elseif ($request->cookie(Passport::cookie())) {
+            return $this->authenticateViaCookie($request);
         }
-
-        if ($this->request->bearerToken()) {
-            return $this->user = $this->authenticateViaBearerToken($this->request);
-        } elseif ($this->request->cookie(Passport::cookie())) {
-            return $this->user = $this->authenticateViaCookie($this->request);
-        }
-    }
-
-    /**
-     * Validate a user's credentials.
-     *
-     * @param  array  $credentials
-     * @return bool
-     */
-    public function validate(array $credentials = [])
-    {
-        return ! is_null((new static(
-            $this->server,
-            $this->provider,
-            $this->tokens,
-            $this->clients,
-            $this->encrypter,
-            $credentials['request'],
-        ))->user());
     }
 
     /**
      * Get the client for the incoming request.
      *
-     * @return \Laravel\Passport\Client|null
+     * @param  \Illuminate\Http\Request  $request
+     * @return mixed
      */
-    public function client()
+    public function client(Request $request)
     {
-        if (! is_null($this->client)) {
-            return $this->client;
-        }
-
-        if ($this->request->bearerToken()) {
-            if (! $psr = $this->getPsrRequestViaBearerToken($this->request)) {
+        if ($request->bearerToken()) {
+            if (! $psr = $this->getPsrRequestViaBearerToken($request)) {
                 return;
             }
 
-            return $this->client = $this->clients->findActive(
+            return $this->clients->findActive(
                 $psr->getAttribute('oauth_client_id')
             );
-        } elseif ($this->request->cookie(Passport::cookie())) {
-            if ($token = $this->getTokenViaCookie($this->request)) {
-                return $this->client = $this->clients->findActive($token['aud']);
+        } elseif ($request->cookie(Passport::cookie())) {
+            if ($token = $this->getTokenViaCookie($request)) {
+                return $this->clients->findActive($token['aud']);
             }
         }
     }
@@ -176,16 +125,6 @@ class TokenGuard implements Guard
     protected function authenticateViaBearerToken($request)
     {
         if (! $psr = $this->getPsrRequestViaBearerToken($request)) {
-            return;
-        }
-
-        $client = $this->clients->findActive(
-            $psr->getAttribute('oauth_client_id')
-        );
-
-        if (! $client ||
-            ($client->provider &&
-             $client->provider !== $this->provider->getProviderName())) {
             return;
         }
 
@@ -207,6 +146,15 @@ class TokenGuard implements Guard
             $psr->getAttribute('oauth_access_token_id')
         );
 
+        $clientId = $psr->getAttribute('oauth_client_id');
+
+        // Finally, we will verify if the client that issued this token is still valid and
+        // its tokens may still be used. If not, we will bail out since we don't want a
+        // user to be able to send access tokens for deleted or revoked applications.
+        if ($this->clients->revoked($clientId)) {
+            return;
+        }
+
         return $token ? $user->withAccessToken($token) : null;
     }
 
@@ -214,19 +162,14 @@ class TokenGuard implements Guard
      * Authenticate and get the incoming PSR-7 request via the Bearer token.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Psr\Http\Message\ServerRequestInterface|null
+     * @return \Psr\Http\Message\ServerRequestInterface
      */
     protected function getPsrRequestViaBearerToken($request)
     {
         // First, we will convert the Symfony request to a PSR-7 implementation which will
         // be compatible with the base OAuth2 library. The Symfony bridge can perform a
-        // conversion for us to a new Nyholm implementation of this PSR-7 request.
-        $psr = (new PsrHttpFactory(
-            new Psr17Factory,
-            new Psr17Factory,
-            new Psr17Factory,
-            new Psr17Factory
-        ))->createRequest($request);
+        // conversion for us to a Zend Diactoros implementation of the PSR-7 request.
+        $psr = (new DiactorosFactory)->createRequest($request);
 
         try {
             return $this->server->validateAuthenticatedRequest($psr);
@@ -295,13 +238,10 @@ class TokenGuard implements Guard
      */
     protected function decodeJwtTokenCookie($request)
     {
-        $jwt = $request->cookie(Passport::cookie());
-
         return (array) JWT::decode(
-            Passport::$decryptsCookies
-                ? CookieValuePrefix::remove($this->encrypter->decrypt($jwt, Passport::$unserializesCookies))
-                : $jwt,
-            new Key(Passport::tokenEncryptionKey($this->encrypter), 'HS256')
+            $this->encrypter->decrypt($request->cookie(Passport::cookie()), Passport::$unserializesCookies),
+            $this->encrypter->getKey(),
+            ['HS256']
         );
     }
 
@@ -330,23 +270,10 @@ class TokenGuard implements Guard
         $token = $request->header('X-CSRF-TOKEN');
 
         if (! $token && $header = $request->header('X-XSRF-TOKEN')) {
-            $token = CookieValuePrefix::remove($this->encrypter->decrypt($header, static::serialized()));
+            $token = $this->encrypter->decrypt($header, static::serialized());
         }
 
         return $token;
-    }
-
-    /**
-     * Set the current request instance.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return $this
-     */
-    public function setRequest(Request $request)
-    {
-        $this->request = $request;
-
-        return $this;
     }
 
     /**
@@ -357,18 +284,5 @@ class TokenGuard implements Guard
     public static function serialized()
     {
         return EncryptCookies::serialized('XSRF-TOKEN');
-    }
-
-    /**
-     * Set the client for the current request.
-     *
-     * @param  \Laravel\Passport\Client  $client
-     * @return $this
-     */
-    public function setClient(Client $client)
-    {
-        $this->client = $client;
-
-        return $this;
     }
 }

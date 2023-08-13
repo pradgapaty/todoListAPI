@@ -26,7 +26,7 @@ class UnixPipes extends AbstractPipes
     private $ptyMode;
     private $haveReadSupport;
 
-    public function __construct(?bool $ttyMode, bool $ptyMode, mixed $input, bool $haveReadSupport)
+    public function __construct(?bool $ttyMode, bool $ptyMode, $input, bool $haveReadSupport)
     {
         $this->ttyMode = $ttyMode;
         $this->ptyMode = $ptyMode;
@@ -35,7 +35,10 @@ class UnixPipes extends AbstractPipes
         parent::__construct($input);
     }
 
-    public function __sleep(): array
+    /**
+     * @return array
+     */
+    public function __sleep()
     {
         throw new \BadMethodCallException('Cannot serialize '.__CLASS__);
     }

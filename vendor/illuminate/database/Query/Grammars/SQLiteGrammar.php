@@ -11,7 +11,7 @@ class SQLiteGrammar extends Grammar
     /**
      * All of the available clause operators.
      *
-     * @var string[]
+     * @var array
      */
     protected $operators = [
         '=', '<', '>', '<=', '>=', '<>', '!=',
@@ -118,20 +118,6 @@ class SQLiteGrammar extends Grammar
     }
 
     /**
-     * Compile the index hints for the query.
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query
-     * @param  \Illuminate\Database\Query\IndexHint  $indexHint
-     * @return string
-     */
-    protected function compileIndexHint(Builder $query, $indexHint)
-    {
-        return $indexHint->type === 'force'
-                ? "indexed by {$indexHint->index}"
-                : '';
-    }
-
-    /**
      * Compile a "JSON length" statement into SQL.
      *
      * @param  string  $column
@@ -144,19 +130,6 @@ class SQLiteGrammar extends Grammar
         [$field, $path] = $this->wrapJsonFieldAndPath($column);
 
         return 'json_array_length('.$field.$path.') '.$operator.' '.$value;
-    }
-
-    /**
-     * Compile a "JSON contains key" statement into SQL.
-     *
-     * @param  string  $column
-     * @return string
-     */
-    protected function compileJsonContainsKey($column)
-    {
-        [$field, $path] = $this->wrapJsonFieldAndPath($column);
-
-        return 'json_type('.$field.$path.') is not null';
     }
 
     /**
@@ -207,30 +180,6 @@ class SQLiteGrammar extends Grammar
 
             return $this->wrap($column).' = '.$value;
         })->implode(', ');
-    }
-
-    /**
-     * Compile an "upsert" statement into SQL.
-     *
-     * @param  \Illuminate\Database\Query\Builder  $query
-     * @param  array  $values
-     * @param  array  $uniqueBy
-     * @param  array  $update
-     * @return string
-     */
-    public function compileUpsert(Builder $query, array $values, array $uniqueBy, array $update)
-    {
-        $sql = $this->compileInsert($query, $values);
-
-        $sql .= ' on conflict ('.$this->columnize($uniqueBy).') do update set ';
-
-        $columns = collect($update)->map(function ($value, $key) {
-            return is_numeric($key)
-                ? $this->wrap($value).' = '.$this->wrapValue('excluded').'.'.$this->wrap($value)
-                : $this->wrap($key).' = '.$this->parameter($value);
-        })->implode(', ');
-
-        return $sql.$columns;
     }
 
     /**

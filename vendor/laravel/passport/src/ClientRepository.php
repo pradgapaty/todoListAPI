@@ -8,36 +8,9 @@ use RuntimeException;
 class ClientRepository
 {
     /**
-     * The personal access client ID.
-     *
-     * @var int|string|null
-     */
-    protected $personalAccessClientId;
-
-    /**
-     * The personal access client secret.
-     *
-     * @var string|null
-     */
-    protected $personalAccessClientSecret;
-
-    /**
-     * Create a new client repository.
-     *
-     * @param  int|string|null  $personalAccessClientId
-     * @param  string|null  $personalAccessClientSecret
-     * @return void
-     */
-    public function __construct($personalAccessClientId = null, $personalAccessClientSecret = null)
-    {
-        $this->personalAccessClientId = $personalAccessClientId;
-        $this->personalAccessClientSecret = $personalAccessClientSecret;
-    }
-
-    /**
      * Get a client by the given ID.
      *
-     * @param  int|string  $id
+     * @param  int  $id
      * @return \Laravel\Passport\Client|null
      */
     public function find($id)
@@ -50,7 +23,7 @@ class ClientRepository
     /**
      * Get an active client by the given ID.
      *
-     * @param  int|string  $id
+     * @param  int  $id
      * @return \Laravel\Passport\Client|null
      */
     public function findActive($id)
@@ -63,7 +36,7 @@ class ClientRepository
     /**
      * Get a client instance for the given ID and user ID.
      *
-     * @param  int|string  $clientId
+     * @param  int  $clientId
      * @param  mixed  $userId
      * @return \Laravel\Passport\Client|null
      */
@@ -112,8 +85,8 @@ class ClientRepository
      */
     public function personalAccessClient()
     {
-        if ($this->personalAccessClientId) {
-            return $this->find($this->personalAccessClientId);
+        if (Passport::$personalAccessClientId) {
+            return $this->find(Passport::$personalAccessClientId);
         }
 
         $client = Passport::personalAccessClient();
@@ -128,22 +101,19 @@ class ClientRepository
     /**
      * Store a new client.
      *
-     * @param  int|null  $userId
+     * @param  int  $userId
      * @param  string  $name
      * @param  string  $redirect
-     * @param  string|null  $provider
      * @param  bool  $personalAccess
      * @param  bool  $password
-     * @param  bool  $confidential
      * @return \Laravel\Passport\Client
      */
-    public function create($userId, $name, $redirect, $provider = null, $personalAccess = false, $password = false, $confidential = true)
+    public function create($userId, $name, $redirect, $personalAccess = false, $password = false)
     {
         $client = Passport::client()->forceFill([
             'user_id' => $userId,
             'name' => $name,
-            'secret' => ($confidential || $personalAccess) ? Str::random(40) : null,
-            'provider' => $provider,
+            'secret' => Str::random(40),
             'redirect' => $redirect,
             'personal_access_client' => $personalAccess,
             'password_client' => $password,
@@ -158,16 +128,16 @@ class ClientRepository
     /**
      * Store a new personal access token client.
      *
-     * @param  int|null  $userId
+     * @param  int  $userId
      * @param  string  $name
      * @param  string  $redirect
      * @return \Laravel\Passport\Client
      */
     public function createPersonalAccessClient($userId, $name, $redirect)
     {
-        return tap($this->create($userId, $name, $redirect, null, true), function ($client) {
+        return tap($this->create($userId, $name, $redirect, true), function ($client) {
             $accessClient = Passport::personalAccessClient();
-            $accessClient->client_id = $client->getKey();
+            $accessClient->client_id = $client->id;
             $accessClient->save();
         });
     }
@@ -175,21 +145,20 @@ class ClientRepository
     /**
      * Store a new password grant client.
      *
-     * @param  int|null  $userId
+     * @param  int  $userId
      * @param  string  $name
      * @param  string  $redirect
-     * @param  string|null  $provider
      * @return \Laravel\Passport\Client
      */
-    public function createPasswordGrantClient($userId, $name, $redirect, $provider = null)
+    public function createPasswordGrantClient($userId, $name, $redirect)
     {
-        return $this->create($userId, $name, $redirect, $provider, false, true);
+        return $this->create($userId, $name, $redirect, false, true);
     }
 
     /**
      * Update the given client.
      *
-     * @param  \Laravel\Passport\Client  $client
+     * @param  Client  $client
      * @param  string  $name
      * @param  string  $redirect
      * @return \Laravel\Passport\Client
@@ -221,7 +190,7 @@ class ClientRepository
     /**
      * Determine if the given client is revoked.
      *
-     * @param  int|string  $id
+     * @param  int  $id
      * @return bool
      */
     public function revoked($id)
@@ -242,25 +211,5 @@ class ClientRepository
         $client->tokens()->update(['revoked' => true]);
 
         $client->forceFill(['revoked' => true])->save();
-    }
-
-    /**
-     * Get the personal access client id.
-     *
-     * @return int|string|null
-     */
-    public function getPersonalAccessClientId()
-    {
-        return $this->personalAccessClientId;
-    }
-
-    /**
-     * Get the personal access client secret.
-     *
-     * @return string|null
-     */
-    public function getPersonalAccessClientSecret()
-    {
-        return $this->personalAccessClientSecret;
     }
 }

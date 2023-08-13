@@ -5,7 +5,6 @@ namespace Laravel\Passport\Console;
 use Illuminate\Console\Command;
 use Laravel\Passport\Client;
 use Laravel\Passport\ClientRepository;
-use Laravel\Passport\Passport;
 
 class ClientCommand extends Command
 {
@@ -19,10 +18,8 @@ class ClientCommand extends Command
             {--password : Create a password grant client}
             {--client : Create a client credentials grant client}
             {--name= : The name of the client}
-            {--provider= : The name of the user provider}
             {--redirect_uri= : The URI to redirect to after authorization }
-            {--user_id= : The user ID the client should be assigned to }
-            {--public : Create a public client (Auth code grant type only) }';
+            {--user_id= : The user ID the client should be assigned to }';
 
     /**
      * The console command description.
@@ -85,16 +82,8 @@ class ClientCommand extends Command
             config('app.name').' Password Grant Client'
         );
 
-        $providers = array_keys(config('auth.providers'));
-
-        $provider = $this->option('provider') ?: $this->choice(
-            'Which user provider should this client use to retrieve users?',
-            $providers,
-            in_array('users', $providers) ? 'users' : null
-        );
-
         $client = $clients->createPasswordGrantClient(
-            null, $name, 'http://localhost', $provider
+            null, $name, 'http://localhost'
         );
 
         $this->info('Password grant client created successfully.');
@@ -133,7 +122,7 @@ class ClientCommand extends Command
     protected function createAuthCodeClient(ClientRepository $clients)
     {
         $userId = $this->option('user_id') ?: $this->ask(
-            'Which user ID should the client be assigned to? (Optional)'
+            'Which user ID should the client be assigned to?'
         );
 
         $name = $this->option('name') ?: $this->ask(
@@ -146,7 +135,7 @@ class ClientCommand extends Command
         );
 
         $client = $clients->create(
-            $userId, $name, $redirect, null, false, false, ! $this->option('public')
+            $userId, $name, $redirect
         );
 
         $this->info('New client created successfully.');
@@ -162,12 +151,7 @@ class ClientCommand extends Command
      */
     protected function outputClientDetails(Client $client)
     {
-        if (Passport::$hashesClientSecrets) {
-            $this->line('<comment>Here is your new client secret. This is the only time it will be shown so don\'t lose it!</comment>');
-            $this->line('');
-        }
-
-        $this->line('<comment>Client ID:</comment> '.$client->getKey());
-        $this->line('<comment>Client secret:</comment> '.$client->plainSecret);
+        $this->line('<comment>Client ID:</comment> '.$client->id);
+        $this->line('<comment>Client secret:</comment> '.$client->secret);
     }
 }

@@ -2,16 +2,14 @@
 
 namespace Illuminate\Queue;
 
-use Illuminate\Contracts\Queue\ClearableQueue;
 use Illuminate\Contracts\Queue\Queue as QueueContract;
 use Illuminate\Database\Connection;
 use Illuminate\Queue\Jobs\DatabaseJob;
 use Illuminate\Queue\Jobs\DatabaseJobRecord;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 use PDO;
 
-class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
+class DatabaseQueue extends Queue implements QueueContract
 {
     /**
      * The database connection instance.
@@ -48,20 +46,14 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
      * @param  string  $table
      * @param  string  $default
      * @param  int  $retryAfter
-     * @param  bool  $dispatchAfterCommit
      * @return void
      */
-    public function __construct(Connection $database,
-                                $table,
-                                $default = 'default',
-                                $retryAfter = 60,
-                                $dispatchAfterCommit = false)
+    public function __construct(Connection $database, $table, $default = 'default', $retryAfter = 60)
     {
         $this->table = $table;
         $this->default = $default;
         $this->database = $database;
         $this->retryAfter = $retryAfter;
-        $this->dispatchAfterCommit = $dispatchAfterCommit;
     }
 
     /**
@@ -87,15 +79,9 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
      */
     public function push($job, $data = '', $queue = null)
     {
-        return $this->enqueueUsing(
-            $job,
-            $this->createPayload($job, $this->getQueue($queue), $data),
-            $queue,
-            null,
-            function ($payload, $queue) {
-                return $this->pushToDatabase($queue, $payload);
-            }
-        );
+        return $this->pushToDatabase($queue, $this->createPayload(
+            $job, $this->getQueue($queue), $data
+        ));
     }
 
     /**
@@ -112,7 +98,7 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
     }
 
     /**
-     * Push a new job onto the queue after (n) seconds.
+     * Push a new job onto the queue after a delay.
      *
      * @param  \DateTimeInterface|\DateInterval|int  $delay
      * @param  string  $job
@@ -122,15 +108,9 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
      */
     public function later($delay, $job, $data = '', $queue = null)
     {
-        return $this->enqueueUsing(
-            $job,
-            $this->createPayload($job, $this->getQueue($queue), $data),
-            $queue,
-            $delay,
-            function ($payload, $queue, $delay) {
-                return $this->pushToDatabase($queue, $payload, $delay);
-            }
-        );
+        return $this->pushToDatabase($queue, $this->createPayload(
+            $job, $this->getQueue($queue), $data
+        ), $delay);
     }
 
     /**
@@ -145,21 +125,17 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
     {
         $queue = $this->getQueue($queue);
 
-        $now = $this->availableAt();
+        $availableAt = $this->availableAt();
 
         return $this->database->table($this->table)->insert(collect((array) $jobs)->map(
-            function ($job) use ($queue, $data, $now) {
-                return $this->buildDatabaseRecord(
-                    $queue,
-                    $this->createPayload($job, $this->getQueue($queue), $data),
-                    isset($job->delay) ? $this->availableAt($job->delay) : $now,
-                );
+            function ($job) use ($queue, $data, $availableAt) {
+                return $this->buildDatabaseRecord($queue, $this->createPayload($job, $this->getQueue($queue), $data), $availableAt);
             }
         )->all());
     }
 
     /**
-     * Release a reserved job back onto the queue after (n) seconds.
+     * Release a reserved job back onto the queue.
      *
      * @param  string  $queue
      * @param  \Illuminate\Queue\Jobs\DatabaseJobRecord  $job
@@ -172,7 +148,7 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
     }
 
     /**
-     * Push a raw payload to the database with a given delay of (n) seconds.
+     * Push a raw payload to the database with a given delay.
      *
      * @param  string|null  $queue
      * @param  string  $payload
@@ -214,7 +190,7 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
      * @param  string|null  $queue
      * @return \Illuminate\Contracts\Queue\Job|null
      *
-     * @throws \Throwable
+     * @throws \Exception|\Throwable
      */
     public function pop($queue = null)
     {
@@ -256,24 +232,11 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
     protected function getLockForPopping()
     {
         $databaseEngine = $this->database->getPdo()->getAttribute(PDO::ATTR_DRIVER_NAME);
-        $databaseVersion = $this->database->getConfig('version') ?? $this->database->getPdo()->getAttribute(PDO::ATTR_SERVER_VERSION);
+        $databaseVersion = $this->database->getPdo()->getAttribute(PDO::ATTR_SERVER_VERSION);
 
-        if (Str::of($databaseVersion)->contains('MariaDB')) {
-            $databaseEngine = 'mariadb';
-            $databaseVersion = Str::before(Str::after($databaseVersion, '5.5.5-'), '-');
-        } elseif (Str::of($databaseVersion)->contains(['vitess', 'PlanetScale'])) {
-            $databaseEngine = 'vitess';
-            $databaseVersion = Str::before($databaseVersion, '-');
-        }
-
-        if (($databaseEngine === 'mysql' && version_compare($databaseVersion, '8.0.1', '>=')) ||
-            ($databaseEngine === 'mariadb' && version_compare($databaseVersion, '10.6.0', '>=')) ||
-            ($databaseEngine === 'pgsql' && version_compare($databaseVersion, '9.5', '>='))) {
+        if ($databaseEngine == 'mysql' && ! strpos($databaseVersion, 'MariaDB') && version_compare($databaseVersion, '8.0.1', '>=') ||
+            $databaseEngine == 'pgsql' && version_compare($databaseVersion, '9.5', '>=')) {
             return 'FOR UPDATE SKIP LOCKED';
-        }
-
-        if ($databaseEngine === 'sqlsrv') {
-            return 'with(rowlock,updlock,readpast)';
         }
 
         return true;
@@ -347,7 +310,7 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
      * @param  string  $id
      * @return void
      *
-     * @throws \Throwable
+     * @throws \Exception|\Throwable
      */
     public function deleteReserved($queue, $id)
     {
@@ -356,38 +319,6 @@ class DatabaseQueue extends Queue implements QueueContract, ClearableQueue
                 $this->database->table($this->table)->where('id', $id)->delete();
             }
         });
-    }
-
-    /**
-     * Delete a reserved job from the reserved queue and release it.
-     *
-     * @param  string  $queue
-     * @param  \Illuminate\Queue\Jobs\DatabaseJob  $job
-     * @param  int  $delay
-     * @return void
-     */
-    public function deleteAndRelease($queue, $job, $delay)
-    {
-        $this->database->transaction(function () use ($queue, $job, $delay) {
-            if ($this->database->table($this->table)->lockForUpdate()->find($job->getJobId())) {
-                $this->database->table($this->table)->where('id', $job->getJobId())->delete();
-            }
-
-            $this->release($queue, $job->getJobRecord(), $delay);
-        });
-    }
-
-    /**
-     * Delete all of the jobs from the queue.
-     *
-     * @param  string  $queue
-     * @return int
-     */
-    public function clear($queue)
-    {
-        return $this->database->table($this->table)
-                    ->where('queue', $this->getQueue($queue))
-                    ->delete();
     }
 
     /**

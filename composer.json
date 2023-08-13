@@ -1,5 +1,8 @@
 {
     "require": {
-        "laravel/passport": "^11.8"
-    }
+    },
+
+    "autoload": {
+
+    },
 }

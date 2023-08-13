@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Laravel\Passport\ClientRepository;
 use Laravel\Passport\Http\Rules\RedirectRule;
-use Laravel\Passport\Passport;
 
 class ClientController
 {
@@ -58,41 +57,27 @@ class ClientController
      */
     public function forUser(Request $request)
     {
-        $userId = $request->user()->getAuthIdentifier();
+        $userId = $request->user()->getKey();
 
-        $clients = $this->clients->activeForUser($userId);
-
-        if (Passport::$hashesClientSecrets) {
-            return $clients;
-        }
-
-        return $clients->makeVisible('secret');
+        return $this->clients->activeForUser($userId)->makeVisible('secret');
     }
 
     /**
      * Store a new client.
      *
      * @param  \Illuminate\Http\Request  $request
-     * @return \Laravel\Passport\Client|array
+     * @return \Laravel\Passport\Client
      */
     public function store(Request $request)
     {
         $this->validation->make($request->all(), [
-            'name' => 'required|max:191',
+            'name' => 'required|max:255',
             'redirect' => ['required', $this->redirectRule],
-            'confidential' => 'boolean',
         ])->validate();
 
-        $client = $this->clients->create(
-            $request->user()->getAuthIdentifier(), $request->name, $request->redirect,
-            null, false, false, (bool) $request->input('confidential', true)
-        );
-
-        if (Passport::$hashesClientSecrets) {
-            return ['plainSecret' => $client->plainSecret] + $client->toArray();
-        }
-
-        return $client->makeVisible('secret');
+        return $this->clients->create(
+            $request->user()->getKey(), $request->name, $request->redirect
+        )->makeVisible('secret');
     }
 
     /**
@@ -104,14 +89,14 @@ class ClientController
      */
     public function update(Request $request, $clientId)
     {
-        $client = $this->clients->findForUser($clientId, $request->user()->getAuthIdentifier());
+        $client = $this->clients->findForUser($clientId, $request->user()->getKey());
 
         if (! $client) {
             return new Response('', 404);
         }
 
         $this->validation->make($request->all(), [
-            'name' => 'required|max:191',
+            'name' => 'required|max:255',
             'redirect' => ['required', $this->redirectRule],
         ])->validate();
 
@@ -129,7 +114,7 @@ class ClientController
      */
     public function destroy(Request $request, $clientId)
     {
-        $client = $this->clients->findForUser($clientId, $request->user()->getAuthIdentifier());
+        $client = $this->clients->findForUser($clientId, $request->user()->getKey());
 
         if (! $client) {
             return new Response('', 404);

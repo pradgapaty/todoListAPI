@@ -20,22 +20,14 @@ class PersonalAccessGrant extends AbstractGrant
         // Validate request
         $client = $this->validateClient($request);
         $scopes = $this->validateScopes($this->getRequestParameter('scope', $request));
-        $userIdentifier = $this->getRequestParameter('user_id', $request);
 
         // Finalize the requested scopes
-        $scopes = $this->scopeRepository->finalizeScopes(
-            $scopes,
-            $this->getIdentifier(),
-            $client,
-            $userIdentifier
-        );
+        $scopes = $this->scopeRepository->finalizeScopes($scopes, $this->getIdentifier(), $client);
 
         // Issue and persist access token
         $accessToken = $this->issueAccessToken(
-            $accessTokenTTL,
-            $client,
-            $userIdentifier,
-            $scopes
+            $accessTokenTTL, $client,
+            $this->getRequestParameter('user_id', $request), $scopes
         );
 
         // Inject access token into response type

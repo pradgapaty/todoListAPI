@@ -2,8 +2,10 @@
 
 namespace Illuminate\Support;
 
-use Dotenv\Repository\Adapter\PutenvAdapter;
-use Dotenv\Repository\RepositoryBuilder;
+use Dotenv\Environment\Adapter\EnvConstAdapter;
+use Dotenv\Environment\Adapter\PutenvAdapter;
+use Dotenv\Environment\Adapter\ServerConstAdapter;
+use Dotenv\Environment\DotenvFactory;
 use PhpOption\Option;
 
 class Env
@@ -16,11 +18,18 @@ class Env
     protected static $putenv = true;
 
     /**
-     * The environment repository instance.
+     * The environment factory instance.
      *
-     * @var \Dotenv\Repository\RepositoryInterface|null
+     * @var \Dotenv\Environment\FactoryInterface|null
      */
-    protected static $repository;
+    protected static $factory;
+
+    /**
+     * The environment variables instance.
+     *
+     * @var \Dotenv\Environment\VariablesInterface|null
+     */
+    protected static $variables;
 
     /**
      * Enable the putenv adapter.
@@ -30,7 +39,8 @@ class Env
     public static function enablePutenv()
     {
         static::$putenv = true;
-        static::$repository = null;
+        static::$factory = null;
+        static::$variables = null;
     }
 
     /**
@@ -41,27 +51,41 @@ class Env
     public static function disablePutenv()
     {
         static::$putenv = false;
-        static::$repository = null;
+        static::$factory = null;
+        static::$variables = null;
     }
 
     /**
-     * Get the environment repository instance.
+     * Get the environment factory instance.
      *
-     * @return \Dotenv\Repository\RepositoryInterface
+     * @return \Dotenv\Environment\FactoryInterface
      */
-    public static function getRepository()
+    public static function getFactory()
     {
-        if (static::$repository === null) {
-            $builder = RepositoryBuilder::createWithDefaultAdapters();
+        if (static::$factory === null) {
+            $adapters = array_merge(
+                [new EnvConstAdapter, new ServerConstAdapter],
+                static::$putenv ? [new PutenvAdapter] : []
+            );
 
-            if (static::$putenv) {
-                $builder = $builder->addAdapter(PutenvAdapter::class);
-            }
-
-            static::$repository = $builder->immutable()->make();
+            static::$factory = new DotenvFactory($adapters);
         }
 
-        return static::$repository;
+        return static::$factory;
+    }
+
+    /**
+     * Get the environment variables instance.
+     *
+     * @return \Dotenv\Environment\VariablesInterface
+     */
+    public static function getVariables()
+    {
+        if (static::$variables === null) {
+            static::$variables = static::getFactory()->createImmutable();
+        }
+
+        return static::$variables;
     }
 
     /**
@@ -73,7 +97,7 @@ class Env
      */
     public static function get($key, $default = null)
     {
-        return Option::fromValue(static::getRepository()->get($key))
+        return Option::fromValue(static::getVariables()->get($key))
             ->map(function ($value) {
                 switch (strtolower($value)) {
                     case 'true':
@@ -96,6 +120,8 @@ class Env
 
                 return $value;
             })
-            ->getOrCall(fn () => value($default));
+            ->getOrCall(function () use ($default) {
+                return value($default);
+            });
     }
 }

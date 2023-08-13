@@ -42,8 +42,23 @@ class Token extends Model
     protected $casts = [
         'scopes' => 'array',
         'revoked' => 'bool',
-        'expires_at' => 'datetime',
     ];
+
+    /**
+     * The attributes that should be mutated to dates.
+     *
+     * @var array
+     */
+    protected $dates = [
+        'expires_at',
+    ];
+
+    /**
+     * Indicates if the model should be timestamped.
+     *
+     * @var bool
+     */
+    public $timestamps = false;
 
     /**
      * Get the client that the token belongs to.
@@ -64,9 +79,7 @@ class Token extends Model
     {
         $provider = config('auth.guards.api.provider');
 
-        $model = config('auth.providers.'.$provider.'.model');
-
-        return $this->belongsTo($model, 'user_id', (new $model)->getKeyName());
+        return $this->belongsTo(config('auth.providers.'.$provider.'.model'));
     }
 
     /**
@@ -104,11 +117,9 @@ class Token extends Model
     {
         $parts = explode(':', $scope);
 
-        $partsCount = count($parts);
-
         $scopes = [];
 
-        for ($i = 1; $i <= $partsCount; $i++) {
+        for ($i = 0; $i <= count($parts); $i++) {
             $scopes[] = implode(':', array_slice($parts, 0, $i));
         }
 

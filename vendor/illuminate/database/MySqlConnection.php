@@ -2,27 +2,15 @@
 
 namespace Illuminate\Database;
 
-use Illuminate\Database\PDO\MySqlDriver;
+use Doctrine\DBAL\Driver\PDOMySql\Driver as DoctrineDriver;
 use Illuminate\Database\Query\Grammars\MySqlGrammar as QueryGrammar;
 use Illuminate\Database\Query\Processors\MySqlProcessor;
 use Illuminate\Database\Schema\Grammars\MySqlGrammar as SchemaGrammar;
 use Illuminate\Database\Schema\MySqlBuilder;
-use Illuminate\Database\Schema\MySqlSchemaState;
-use Illuminate\Filesystem\Filesystem;
-use PDO;
+use LogicException;
 
 class MySqlConnection extends Connection
 {
-    /**
-     * Determine if the connected database is a MariaDB database.
-     *
-     * @return bool
-     */
-    public function isMaria()
-    {
-        return str_contains($this->getPdo()->getAttribute(PDO::ATTR_SERVER_VERSION), 'MariaDB');
-    }
-
     /**
      * Get the default query grammar instance.
      *
@@ -58,18 +46,6 @@ class MySqlConnection extends Connection
     }
 
     /**
-     * Get the schema state for the connection.
-     *
-     * @param  \Illuminate\Filesystem\Filesystem|null  $files
-     * @param  callable|null  $processFactory
-     * @return \Illuminate\Database\Schema\MySqlSchemaState
-     */
-    public function getSchemaState(Filesystem $files = null, callable $processFactory = null)
-    {
-        return new MySqlSchemaState($this, $files, $processFactory);
-    }
-
-    /**
      * Get the default post processor instance.
      *
      * @return \Illuminate\Database\Query\Processors\MySqlProcessor
@@ -82,10 +58,16 @@ class MySqlConnection extends Connection
     /**
      * Get the Doctrine DBAL driver.
      *
-     * @return \Illuminate\Database\PDO\MySqlDriver
+     * @return \Doctrine\DBAL\Driver\PDOMySql\Driver
      */
     protected function getDoctrineDriver()
     {
-        return new MySqlDriver;
+        if (! class_exists(DoctrineDriver::class)) {
+            throw new LogicException(
+                'Laravel v6 is only compatible with doctrine/dbal 2, in order to use this feature you must require the package "doctrine/dbal:^2.6".'
+            );
+        }
+
+        return new DoctrineDriver;
     }
 }

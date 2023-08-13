@@ -4,9 +4,8 @@ namespace Laravel\Passport;
 
 use Lcobucci\JWT\Parser as JwtParser;
 use League\OAuth2\Server\AuthorizationServer;
-use Nyholm\Psr7\Response;
-use Nyholm\Psr7\ServerRequest;
-use Psr\Http\Message\ServerRequestInterface;
+use Zend\Diactoros\Response;
+use Zend\Diactoros\ServerRequest;
 
 class PersonalAccessTokenFactory
 {
@@ -90,16 +89,14 @@ class PersonalAccessTokenFactory
      * @param  \Laravel\Passport\Client  $client
      * @param  mixed  $userId
      * @param  array  $scopes
-     * @return \Psr\Http\Message\ServerRequestInterface
+     * @return \Zend\Diactoros\ServerRequest
      */
     protected function createRequest($client, $userId, array $scopes)
     {
-        $secret = Passport::$hashesClientSecrets ? $this->clients->getPersonalAccessClientSecret() : $client->secret;
-
-        return (new ServerRequest('POST', 'not-important'))->withParsedBody([
+        return (new ServerRequest)->withParsedBody([
             'grant_type' => 'personal_access',
-            'client_id' => $client->getKey(),
-            'client_secret' => $secret,
+            'client_id' => $client->id,
+            'client_secret' => $client->secret,
             'user_id' => $userId,
             'scope' => implode(' ', $scopes),
         ]);
@@ -108,10 +105,10 @@ class PersonalAccessTokenFactory
     /**
      * Dispatch the given request to the authorization server.
      *
-     * @param  \Psr\Http\Message\ServerRequestInterface  $request
+     * @param  \Zend\Diactoros\ServerRequest  $request
      * @return array
      */
-    protected function dispatchRequestToAuthorizationServer(ServerRequestInterface $request)
+    protected function dispatchRequestToAuthorizationServer(ServerRequest $request)
     {
         return json_decode($this->server->respondToAccessTokenRequest(
             $request, new Response
@@ -122,12 +119,12 @@ class PersonalAccessTokenFactory
      * Get the access token instance for the parsed response.
      *
      * @param  array  $response
-     * @return \Laravel\Passport\Token
+     * @return Token
      */
-    public function findAccessToken(array $response)
+    protected function findAccessToken(array $response)
     {
         return $this->tokens->find(
-            $this->jwt->parse($response['access_token'])->claims()->get('jti')
+            $this->jwt->parse($response['access_token'])->getClaim('jti')
         );
     }
 }

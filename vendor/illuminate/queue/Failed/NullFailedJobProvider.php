@@ -10,7 +10,7 @@ class NullFailedJobProvider implements FailedJobProviderInterface
      * @param  string  $connection
      * @param  string  $queue
      * @param  string  $payload
-     * @param  \Throwable  $exception
+     * @param  \Exception  $exception
      * @return int|null
      */
     public function log($connection, $queue, $payload, $exception)
@@ -53,10 +53,9 @@ class NullFailedJobProvider implements FailedJobProviderInterface
     /**
      * Flush all of the failed jobs from storage.
      *
-     * @param  int|null  $hours
      * @return void
      */
-    public function flush($hours = null)
+    public function flush()
     {
         //
     }

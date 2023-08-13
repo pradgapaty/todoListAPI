@@ -4,19 +4,20 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration
+class CreateOauthClientsTable extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * @return void
      */
-    public function up(): void
+    public function up()
     {
         Schema::create('oauth_clients', function (Blueprint $table) {
-            $table->bigIncrements('id');
-            $table->unsignedBigInteger('user_id')->nullable()->index();
+            $table->increments('id');
+            $table->bigInteger('user_id')->index()->nullable();
             $table->string('name');
-            $table->string('secret', 100)->nullable();
-            $table->string('provider')->nullable();
+            $table->string('secret', 100);
             $table->text('redirect');
             $table->boolean('personal_access_client');
             $table->boolean('password_client');
@@ -27,9 +28,11 @@ return new class extends Migration
 
     /**
      * Reverse the migrations.
+     *
+     * @return void
      */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('oauth_clients');
     }
-};
+}

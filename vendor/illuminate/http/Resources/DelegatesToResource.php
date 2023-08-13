@@ -4,13 +4,10 @@ namespace Illuminate\Http\Resources;
 
 use Exception;
 use Illuminate\Support\Traits\ForwardsCalls;
-use Illuminate\Support\Traits\Macroable;
 
 trait DelegatesToResource
 {
-    use ForwardsCalls, Macroable {
-        __call as macroCall;
-    }
+    use ForwardsCalls;
 
     /**
      * Get the value of the resource's route key.
@@ -36,27 +33,11 @@ trait DelegatesToResource
      * Retrieve the model for a bound value.
      *
      * @param  mixed  $value
-     * @param  string|null  $field
      * @return void
      *
      * @throws \Exception
      */
-    public function resolveRouteBinding($value, $field = null)
-    {
-        throw new Exception('Resources may not be implicitly resolved from route bindings.');
-    }
-
-    /**
-     * Retrieve the model for a bound value.
-     *
-     * @param  string  $childType
-     * @param  mixed  $value
-     * @param  string|null  $field
-     * @return void
-     *
-     * @throws \Exception
-     */
-    public function resolveChildRouteBinding($childType, $value, $field = null)
+    public function resolveRouteBinding($value)
     {
         throw new Exception('Resources may not be implicitly resolved from route bindings.');
     }
@@ -67,7 +48,7 @@ trait DelegatesToResource
      * @param  mixed  $offset
      * @return bool
      */
-    public function offsetExists($offset): bool
+    public function offsetExists($offset)
     {
         return isset($this->resource[$offset]);
     }
@@ -78,7 +59,7 @@ trait DelegatesToResource
      * @param  mixed  $offset
      * @return mixed
      */
-    public function offsetGet($offset): mixed
+    public function offsetGet($offset)
     {
         return $this->resource[$offset];
     }
@@ -90,7 +71,7 @@ trait DelegatesToResource
      * @param  mixed  $value
      * @return void
      */
-    public function offsetSet($offset, $value): void
+    public function offsetSet($offset, $value)
     {
         $this->resource[$offset] = $value;
     }
@@ -101,7 +82,7 @@ trait DelegatesToResource
      * @param  mixed  $offset
      * @return void
      */
-    public function offsetUnset($offset): void
+    public function offsetUnset($offset)
     {
         unset($this->resource[$offset]);
     }
@@ -148,10 +129,6 @@ trait DelegatesToResource
      */
     public function __call($method, $parameters)
     {
-        if (static::hasMacro($method)) {
-            return $this->macroCall($method, $parameters);
-        }
-
         return $this->forwardCallTo($this->resource, $method, $parameters);
     }
 }

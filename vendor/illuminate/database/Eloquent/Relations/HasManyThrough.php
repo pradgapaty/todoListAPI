@@ -2,19 +2,14 @@
 
 namespace Illuminate\Database\Eloquent\Relations;
 
-use Closure;
-use Illuminate\Contracts\Support\Arrayable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Database\Eloquent\Relations\Concerns\InteractsWithDictionary;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class HasManyThrough extends Relation
 {
-    use InteractsWithDictionary;
-
     /**
      * The "through" parent model instance.
      *
@@ -56,6 +51,13 @@ class HasManyThrough extends Relation
      * @var string
      */
     protected $secondLocalKey;
+
+    /**
+     * The count of self joins.
+     *
+     * @var int
+     */
+    protected static $selfJoinCount = 0;
 
     /**
      * Create a new has many through relationship instance.
@@ -112,9 +114,7 @@ class HasManyThrough extends Relation
         $query->join($this->throughParent->getTable(), $this->getQualifiedParentKeyName(), '=', $farKey);
 
         if ($this->throughParentSoftDeletes()) {
-            $query->withGlobalScope('SoftDeletableHasManyThrough', function ($query) {
-                $query->whereNull($this->throughParent->getQualifiedDeletedAtColumn());
-            });
+            $query->whereNull($this->throughParent->getQualifiedDeletedAtColumn());
         }
     }
 
@@ -136,18 +136,6 @@ class HasManyThrough extends Relation
     public function throughParentSoftDeletes()
     {
         return in_array(SoftDeletes::class, class_uses_recursive($this->throughParent));
-    }
-
-    /**
-     * Indicate that trashed "through" parents should be included in the query.
-     *
-     * @return $this
-     */
-    public function withTrashedParents()
-    {
-        $this->query->withoutGlobalScope('SoftDeletableHasManyThrough');
-
-        return $this;
     }
 
     /**
@@ -197,7 +185,7 @@ class HasManyThrough extends Relation
         // link them up with their children using the keyed dictionary to make the
         // matching very convenient and easy work. Then we'll just return them.
         foreach ($models as $model) {
-            if (isset($dictionary[$key = $this->getDictionaryKey($model->getAttribute($this->localKey))])) {
+            if (isset($dictionary[$key = $model->getAttribute($this->localKey)])) {
                 $model->setRelation(
                     $relation, $this->related->newCollection($dictionary[$key])
                 );
@@ -291,7 +279,7 @@ class HasManyThrough extends Relation
      * @param  array  $columns
      * @return \Illuminate\Database\Eloquent\Model|static
      *
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException<\Illuminate\Database\Eloquent\Model>
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
     public function firstOrFail($columns = ['*'])
     {
@@ -303,28 +291,6 @@ class HasManyThrough extends Relation
     }
 
     /**
-     * Execute the query and get the first result or call a callback.
-     *
-     * @param  \Closure|array  $columns
-     * @param  \Closure|null  $callback
-     * @return \Illuminate\Database\Eloquent\Model|static|mixed
-     */
-    public function firstOr($columns = ['*'], Closure $callback = null)
-    {
-        if ($columns instanceof Closure) {
-            $callback = $columns;
-
-            $columns = ['*'];
-        }
-
-        if (! is_null($model = $this->first($columns))) {
-            return $model;
-        }
-
-        return $callback();
-    }
-
-    /**
      * Find a related model by its primary key.
      *
      * @param  mixed  $id
@@ -333,7 +299,7 @@ class HasManyThrough extends Relation
      */
     public function find($id, $columns = ['*'])
     {
-        if (is_array($id) || $id instanceof Arrayable) {
+        if (is_array($id)) {
             return $this->findMany($id, $columns);
         }
 
@@ -345,14 +311,12 @@ class HasManyThrough extends Relation
     /**
      * Find multiple related models by their primary keys.
      *
-     * @param  \Illuminate\Contracts\Support\Arrayable|array  $ids
+     * @param  mixed  $ids
      * @param  array  $columns
      * @return \Illuminate\Database\Eloquent\Collection
      */
     public function findMany($ids, $columns = ['*'])
     {
-        $ids = $ids instanceof Arrayable ? $ids->toArray() : $ids;
-
         if (empty($ids)) {
             return $this->getRelated()->newCollection();
         }
@@ -369,13 +333,11 @@ class HasManyThrough extends Relation
      * @param  array  $columns
      * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection
      *
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException<\Illuminate\Database\Eloquent\Model>
+     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
      */
     public function findOrFail($id, $columns = ['*'])
     {
         $result = $this->find($id, $columns);
-
-        $id = $id instanceof Arrayable ? $id->toArray() : $id;
 
         if (is_array($id)) {
             if (count($result) === count(array_unique($id))) {
@@ -386,37 +348,6 @@ class HasManyThrough extends Relation
         }
 
         throw (new ModelNotFoundException)->setModel(get_class($this->related), $id);
-    }
-
-    /**
-     * Find a related model by its primary key or call a callback.
-     *
-     * @param  mixed  $id
-     * @param  \Closure|array  $columns
-     * @param  \Closure|null  $callback
-     * @return \Illuminate\Database\Eloquent\Model|\Illuminate\Database\Eloquent\Collection|mixed
-     */
-    public function findOr($id, $columns = ['*'], Closure $callback = null)
-    {
-        if ($columns instanceof Closure) {
-            $callback = $columns;
-
-            $columns = ['*'];
-        }
-
-        $result = $this->find($id, $columns);
-
-        $id = $id instanceof Arrayable ? $id->toArray() : $id;
-
-        if (is_array($id)) {
-            if (count($result) === count(array_unique($id))) {
-                return $result;
-            }
-        } elseif (! is_null($result)) {
-            return $result;
-        }
-
-        return $callback();
     }
 
     /**
@@ -486,22 +417,6 @@ class HasManyThrough extends Relation
     }
 
     /**
-     * Paginate the given query into a cursor paginator.
-     *
-     * @param  int|null  $perPage
-     * @param  array  $columns
-     * @param  string  $cursorName
-     * @param  string|null  $cursor
-     * @return \Illuminate\Contracts\Pagination\CursorPaginator
-     */
-    public function cursorPaginate($perPage = null, $columns = ['*'], $cursorName = 'cursor', $cursor = null)
-    {
-        $this->query->addSelect($this->shouldSelect($columns));
-
-        return $this->query->cursorPaginate($perPage, $columns, $cursorName, $cursor);
-    }
-
-    /**
      * Set the select clause for the relation query.
      *
      * @param  array  $columns
@@ -539,9 +454,9 @@ class HasManyThrough extends Relation
      */
     public function chunkById($count, callable $callback, $column = null, $alias = null)
     {
-        $column ??= $this->getRelated()->getQualifiedKeyName();
+        $column = $column ?? $this->getRelated()->getQualifiedKeyName();
 
-        $alias ??= $this->getRelated()->getKeyName();
+        $alias = $alias ?? $this->getRelated()->getKeyName();
 
         return $this->prepareQueryBuilder()->chunkById($count, $callback, $column, $alias);
     }
@@ -549,7 +464,7 @@ class HasManyThrough extends Relation
     /**
      * Get a generator for the given query.
      *
-     * @return \Illuminate\Support\LazyCollection
+     * @return \Generator
      */
     public function cursor()
     {
@@ -572,34 +487,6 @@ class HasManyThrough extends Relation
                 }
             }
         });
-    }
-
-    /**
-     * Query lazily, by chunks of the given size.
-     *
-     * @param  int  $chunkSize
-     * @return \Illuminate\Support\LazyCollection
-     */
-    public function lazy($chunkSize = 1000)
-    {
-        return $this->prepareQueryBuilder()->lazy($chunkSize);
-    }
-
-    /**
-     * Query lazily, by chunking the results of a query by comparing IDs.
-     *
-     * @param  int  $chunkSize
-     * @param  string|null  $column
-     * @param  string|null  $alias
-     * @return \Illuminate\Support\LazyCollection
-     */
-    public function lazyById($chunkSize = 1000, $column = null, $alias = null)
-    {
-        $column ??= $this->getRelated()->getQualifiedKeyName();
-
-        $alias ??= $this->getRelated()->getKeyName();
-
-        return $this->prepareQueryBuilder()->lazyById($chunkSize, $column, $alias);
     }
 
     /**
@@ -688,6 +575,16 @@ class HasManyThrough extends Relation
         return $query->select($columns)->whereColumn(
             $parentQuery->getQuery()->from.'.'.$this->localKey, '=', $hash.'.'.$this->firstKey
         );
+    }
+
+    /**
+     * Get a relationship join table hash.
+     *
+     * @return string
+     */
+    public function getRelationCountHash()
+    {
+        return 'laravel_reserved_'.static::$selfJoinCount++;
     }
 
     /**

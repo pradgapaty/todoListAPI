@@ -92,19 +92,17 @@ trait InteractsWithPivotTable
         $current = $this->getCurrentlyAttachedPivots()
                         ->pluck($this->relatedPivotKey)->all();
 
-        $records = $this->formatRecordsList($this->parseIds($ids));
+        $detach = array_diff($current, array_keys(
+            $records = $this->formatRecordsList($this->parseIds($ids))
+        ));
 
         // Next, we will take the differences of the currents and given IDs and detach
         // all of the entities that exist in the "current" array but are not in the
         // array of the new IDs given to the method which will complete the sync.
-        if ($detaching) {
-            $detach = array_diff($current, array_keys($records));
+        if ($detaching && count($detach) > 0) {
+            $this->detach($detach);
 
-            if (count($detach) > 0) {
-                $this->detach($detach);
-
-                $changes['detached'] = $this->castKeys($detach);
-            }
+            $changes['detached'] = $this->castKeys($detach);
         }
 
         // Now we are finally ready to attach the new records. Note that we'll disable
@@ -118,27 +116,11 @@ trait InteractsWithPivotTable
         // have done any attaching or detaching, and if we have we will touch these
         // relationships if they are configured to touch on any database updates.
         if (count($changes['attached']) ||
-            count($changes['updated']) ||
-            count($changes['detached'])) {
+            count($changes['updated'])) {
             $this->touchIfTouching();
         }
 
         return $changes;
-    }
-
-    /**
-     * Sync the intermediate tables with a list of IDs or collection of models with the given pivot values.
-     *
-     * @param  \Illuminate\Support\Collection|\Illuminate\Database\Eloquent\Model|array  $ids
-     * @param  array  $values
-     * @param  bool  $detaching
-     * @return array
-     */
-    public function syncWithPivotValues($ids, array $values, bool $detaching = true)
-    {
-        return $this->sync(collect($this->parseIds($ids))->mapWithKeys(function ($id) use ($values) {
-            return [$id => $values];
-        }), $detaching);
     }
 
     /**
@@ -202,14 +184,11 @@ trait InteractsWithPivotTable
      */
     public function updateExistingPivot($id, array $attributes, $touch = true)
     {
-        if ($this->using &&
-            empty($this->pivotWheres) &&
-            empty($this->pivotWhereIns) &&
-            empty($this->pivotWhereNulls)) {
+        if ($this->using && empty($this->pivotWheres) && empty($this->pivotWhereIns)) {
             return $this->updateExistingPivotUsingCustomClass($id, $attributes, $touch);
         }
 
-        if ($this->hasPivotColumn($this->updatedAt())) {
+        if (in_array($this->updatedAt(), $this->pivotColumns)) {
             $attributes = $this->addTimestampsToAttachment($attributes, true);
         }
 
@@ -241,9 +220,14 @@ trait InteractsWithPivotTable
 
         $updated = $pivot ? $pivot->fill($attributes)->isDirty() : false;
 
-        if ($updated) {
-            $pivot->save();
-        }
+        $pivot = $this->newPivot([
+            $this->foreignPivotKey => $this->parent->{$this->parentKey},
+            $this->relatedPivotKey => $this->parseId($id),
+        ], true);
+
+        $pivot->timestamps = $updated && in_array($this->updatedAt(), $this->pivotColumns);
+
+        $pivot->fill($attributes)->save();
 
         if ($touch) {
             $this->touchIfTouching();
@@ -430,11 +414,7 @@ trait InteractsWithPivotTable
      */
     public function detach($ids = null, $touch = true)
     {
-        if ($this->using &&
-            ! empty($ids) &&
-            empty($this->pivotWheres) &&
-            empty($this->pivotWhereIns) &&
-            empty($this->pivotWhereNulls)) {
+        if ($this->using && ! empty($ids) && empty($this->pivotWheres) && empty($this->pivotWhereIns)) {
             $results = $this->detachUsingCustomClass($ids);
         } else {
             $query = $this->newPivotQuery();
@@ -493,11 +473,9 @@ trait InteractsWithPivotTable
     protected function getCurrentlyAttachedPivots()
     {
         return $this->newPivotQuery()->get()->map(function ($record) {
-            $class = $this->using ?: Pivot::class;
+            $class = $this->using ? $this->using : Pivot::class;
 
-            $pivot = $class::fromRawAttributes($this->parent, (array) $record, $this->getTable(), true);
-
-            return $pivot->setPivotKeys($this->foreignPivotKey, $this->relatedPivotKey);
+            return (new $class)->setRawAttributes((array) $record, true);
         });
     }
 
@@ -564,10 +542,6 @@ trait InteractsWithPivotTable
 
         foreach ($this->pivotWhereIns as $arguments) {
             $query->whereIn(...$arguments);
-        }
-
-        foreach ($this->pivotWhereNulls as $arguments) {
-            $query->whereNull(...$arguments);
         }
 
         return $query->where($this->getQualifiedForeignPivotKeyName(), $this->parent->{$this->parentKey});
@@ -671,11 +645,18 @@ trait InteractsWithPivotTable
      */
     protected function getTypeSwapValue($type, $value)
     {
-        return match (strtolower($type)) {
-            'int', 'integer' => (int) $value,
-            'real', 'float', 'double' => (float) $value,
-            'string' => (string) $value,
-            default => $value,
-        };
+        switch (strtolower($type)) {
+            case 'int':
+            case 'integer':
+                return (int) $value;
+            case 'real':
+            case 'float':
+            case 'double':
+                return (float) $value;
+            case 'string':
+                return (string) $value;
+            default:
+                return $value;
+        }
     }
 }

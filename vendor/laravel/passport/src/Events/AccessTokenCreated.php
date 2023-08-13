@@ -29,7 +29,7 @@ class AccessTokenCreated
      * Create a new event instance.
      *
      * @param  string  $tokenId
-     * @param  string|int|null  $userId
+     * @param  string  $userId
      * @param  string  $clientId
      * @return void
      */

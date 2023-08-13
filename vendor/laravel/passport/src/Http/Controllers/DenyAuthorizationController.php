@@ -2,30 +2,30 @@
 
 namespace Laravel\Passport\Http\Controllers;
 
+use Illuminate\Contracts\Routing\ResponseFactory;
 use Illuminate\Http\Request;
-use League\OAuth2\Server\AuthorizationServer;
-use Nyholm\Psr7\Response as Psr7Response;
+use Illuminate\Support\Arr;
 
 class DenyAuthorizationController
 {
-    use ConvertsPsrResponses, HandlesOAuthErrors, RetrievesAuthRequestFromSession;
+    use RetrievesAuthRequestFromSession;
 
     /**
-     * The authorization server.
+     * The response factory implementation.
      *
-     * @var \League\OAuth2\Server\AuthorizationServer
+     * @var \Illuminate\Contracts\Routing\ResponseFactory
      */
-    protected $server;
+    protected $response;
 
     /**
      * Create a new controller instance.
      *
-     * @param  \League\OAuth2\Server\AuthorizationServer  $server
+     * @param  \Illuminate\Contracts\Routing\ResponseFactory  $response
      * @return void
      */
-    public function __construct(AuthorizationServer $server)
+    public function __construct(ResponseFactory $response)
     {
-        $this->server = $server;
+        $this->response = $response;
     }
 
     /**
@@ -36,16 +36,18 @@ class DenyAuthorizationController
      */
     public function deny(Request $request)
     {
-        $this->assertValidAuthToken($request);
-
         $authRequest = $this->getAuthRequestFromSession($request);
 
-        $authRequest->setAuthorizationApproved(false);
+        $clientUris = Arr::wrap($authRequest->getClient()->getRedirectUri());
 
-        return $this->withErrorHandling(function () use ($authRequest) {
-            return $this->convertResponse(
-                $this->server->completeAuthorizationRequest($authRequest, new Psr7Response)
-            );
-        });
+        if (! in_array($uri = $authRequest->getRedirectUri(), $clientUris)) {
+            $uri = Arr::first($clientUris);
+        }
+
+        $separator = $authRequest->getGrantTypeId() === 'implicit' ? '#' : (strstr($uri, '?') ? '&' : '?');
+
+        return $this->response->redirectTo(
+            $uri.$separator.'error=access_denied&state='.$request->input('state')
+        );
     }
 }

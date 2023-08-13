@@ -7,21 +7,21 @@ trait HidesAttributes
     /**
      * The attributes that should be hidden for serialization.
      *
-     * @var array<string>
+     * @var array
      */
     protected $hidden = [];
 
     /**
      * The attributes that should be visible in serialization.
      *
-     * @var array<string>
+     * @var array
      */
     protected $visible = [];
 
     /**
      * Get the hidden attributes for the model.
      *
-     * @return array<string>
+     * @return array
      */
     public function getHidden()
     {
@@ -31,7 +31,7 @@ trait HidesAttributes
     /**
      * Set the hidden attributes for the model.
      *
-     * @param  array<string>  $hidden
+     * @param  array  $hidden
      * @return $this
      */
     public function setHidden(array $hidden)
@@ -42,9 +42,22 @@ trait HidesAttributes
     }
 
     /**
+     * Add hidden attributes for the model.
+     *
+     * @param  array|string|null  $attributes
+     * @return void
+     */
+    public function addHidden($attributes = null)
+    {
+        $this->hidden = array_merge(
+            $this->hidden, is_array($attributes) ? $attributes : func_get_args()
+        );
+    }
+
+    /**
      * Get the visible attributes for the model.
      *
-     * @return array<string>
+     * @return array
      */
     public function getVisible()
     {
@@ -54,7 +67,7 @@ trait HidesAttributes
     /**
      * Set the visible attributes for the model.
      *
-     * @param  array<string>  $visible
+     * @param  array  $visible
      * @return $this
      */
     public function setVisible(array $visible)
@@ -65,60 +78,49 @@ trait HidesAttributes
     }
 
     /**
+     * Add visible attributes for the model.
+     *
+     * @param  array|string|null  $attributes
+     * @return void
+     */
+    public function addVisible($attributes = null)
+    {
+        $this->visible = array_merge(
+            $this->visible, is_array($attributes) ? $attributes : func_get_args()
+        );
+    }
+
+    /**
      * Make the given, typically hidden, attributes visible.
      *
-     * @param  array<string>|string|null  $attributes
+     * @param  array|string  $attributes
      * @return $this
      */
     public function makeVisible($attributes)
     {
-        $attributes = is_array($attributes) ? $attributes : func_get_args();
-
-        $this->hidden = array_diff($this->hidden, $attributes);
+        $this->hidden = array_diff($this->hidden, (array) $attributes);
 
         if (! empty($this->visible)) {
-            $this->visible = array_merge($this->visible, $attributes);
+            $this->addVisible($attributes);
         }
 
         return $this;
     }
 
     /**
-     * Make the given, typically hidden, attributes visible if the given truth test passes.
-     *
-     * @param  bool|\Closure  $condition
-     * @param  array<string>|string|null  $attributes
-     * @return $this
-     */
-    public function makeVisibleIf($condition, $attributes)
-    {
-        return value($condition, $this) ? $this->makeVisible($attributes) : $this;
-    }
-
-    /**
      * Make the given, typically visible, attributes hidden.
      *
-     * @param  array<string>|string|null  $attributes
+     * @param  array|string  $attributes
      * @return $this
      */
     public function makeHidden($attributes)
     {
-        $this->hidden = array_merge(
-            $this->hidden, is_array($attributes) ? $attributes : func_get_args()
-        );
+        $attributes = (array) $attributes;
+
+        $this->visible = array_diff($this->visible, $attributes);
+
+        $this->hidden = array_unique(array_merge($this->hidden, $attributes));
 
         return $this;
-    }
-
-    /**
-     * Make the given, typically visible, attributes hidden if the given truth test passes.
-     *
-     * @param  bool|\Closure  $condition
-     * @param  array<string>|string|null  $attributes
-     * @return $this
-     */
-    public function makeHiddenIf($condition, $attributes)
-    {
-        return value($condition, $this) ? $this->makeHidden($attributes) : $this;
     }
 }

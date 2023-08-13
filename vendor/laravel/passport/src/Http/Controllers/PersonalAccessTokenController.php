@@ -45,7 +45,7 @@ class PersonalAccessTokenController
      */
     public function forUser(Request $request)
     {
-        $tokens = $this->tokenRepository->forUser($request->user()->getAuthIdentifier());
+        $tokens = $this->tokenRepository->forUser($request->user()->getKey());
 
         return $tokens->load('client')->filter(function ($token) {
             return $token->client->personal_access_client && ! $token->revoked;
@@ -61,7 +61,7 @@ class PersonalAccessTokenController
     public function store(Request $request)
     {
         $this->validation->make($request->all(), [
-            'name' => 'required|max:191',
+            'name' => 'required|max:255',
             'scopes' => 'array|in:'.implode(',', Passport::scopeIds()),
         ])->validate();
 
@@ -80,7 +80,7 @@ class PersonalAccessTokenController
     public function destroy(Request $request, $tokenId)
     {
         $token = $this->tokenRepository->findForUser(
-            $tokenId, $request->user()->getAuthIdentifier()
+            $tokenId, $request->user()->getKey()
         );
 
         if (is_null($token)) {

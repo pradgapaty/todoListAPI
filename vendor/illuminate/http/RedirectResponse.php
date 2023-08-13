@@ -161,28 +161,6 @@ class RedirectResponse extends BaseRedirectResponse
     }
 
     /**
-     * Add a fragment identifier to the URL.
-     *
-     * @param  string  $fragment
-     * @return $this
-     */
-    public function withFragment($fragment)
-    {
-        return $this->withoutFragment()
-                ->setTargetUrl($this->getTargetUrl().'#'.Str::after($fragment, '#'));
-    }
-
-    /**
-     * Remove any fragment identifier from the response URL.
-     *
-     * @return $this
-     */
-    public function withoutFragment()
-    {
-        return $this->setTargetUrl(Str::before($this->getTargetUrl(), '#'));
-    }
-
-    /**
      * Get the original response content.
      *
      * @return null
@@ -249,7 +227,7 @@ class RedirectResponse extends BaseRedirectResponse
             return $this->macroCall($method, $parameters);
         }
 
-        if (str_starts_with($method, 'with')) {
+        if (Str::startsWith($method, 'with')) {
             return $this->with(Str::snake(substr($method, 4)), $parameters[0]);
         }
 

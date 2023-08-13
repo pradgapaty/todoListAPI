@@ -2,9 +2,9 @@
 
 namespace Illuminate\Http;
 
+use Exception;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Symfony\Component\HttpFoundation\HeaderBag;
-use Throwable;
 
 trait ResponseTrait
 {
@@ -18,7 +18,7 @@ trait ResponseTrait
     /**
      * The exception that triggered the error response (if applicable).
      *
-     * @var \Throwable|null
+     * @var \Exception|null
      */
     public $exception;
 
@@ -30,16 +30,6 @@ trait ResponseTrait
     public function status()
     {
         return $this->getStatusCode();
-    }
-
-    /**
-     * Get the status text for the response.
-     *
-     * @return string
-     */
-    public function statusText()
-    {
-        return $this->statusText;
     }
 
     /**
@@ -127,25 +117,6 @@ trait ResponseTrait
     }
 
     /**
-     * Expire a cookie when sending the response.
-     *
-     * @param  \Symfony\Component\HttpFoundation\Cookie|mixed  $cookie
-     * @param  string|null  $path
-     * @param  string|null  $domain
-     * @return $this
-     */
-    public function withoutCookie($cookie, $path = null, $domain = null)
-    {
-        if (is_string($cookie) && function_exists('cookie')) {
-            $cookie = cookie($cookie, null, -2628000, $path, $domain);
-        }
-
-        $this->headers->setCookie($cookie);
-
-        return $this;
-    }
-
-    /**
      * Get the callback of the response.
      *
      * @return string|null
@@ -158,10 +129,10 @@ trait ResponseTrait
     /**
      * Set the exception to attach to the response.
      *
-     * @param  \Throwable  $e
+     * @param  \Exception  $e
      * @return $this
      */
-    public function withException(Throwable $e)
+    public function withException(Exception $e)
     {
         $this->exception = $e;
 

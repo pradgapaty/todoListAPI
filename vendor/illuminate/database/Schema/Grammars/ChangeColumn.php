@@ -33,16 +33,12 @@ class ChangeColumn
             ));
         }
 
-        $schema = $connection->getDoctrineSchemaManager();
-        $databasePlatform = $schema->getDatabasePlatform();
-        $databasePlatform->registerDoctrineTypeMapping('enum', 'string');
-
         $tableDiff = static::getChangedDiff(
-            $grammar, $blueprint, $schema
+            $grammar, $blueprint, $schema = $connection->getDoctrineSchemaManager()
         );
 
         if ($tableDiff !== false) {
-            return (array) $databasePlatform->getAlterTableSQL($tableDiff);
+            return (array) $schema->getDatabasePlatform()->getAlterTableSQL($tableDiff);
         }
 
         return [];
@@ -121,12 +117,8 @@ class ChangeColumn
     {
         $options = ['type' => static::getDoctrineColumnType($fluent['type'])];
 
-        if (in_array($fluent['type'], ['tinyText', 'text', 'mediumText', 'longText'])) {
+        if (in_array($fluent['type'], ['text', 'mediumText', 'longText'])) {
             $options['length'] = static::calculateDoctrineTextLength($fluent['type']);
-        }
-
-        if ($fluent['type'] === 'char') {
-            $options['fixed'] = true;
         }
 
         if (static::doesntNeedCharacterOptions($fluent['type'])) {
@@ -149,16 +141,23 @@ class ChangeColumn
     {
         $type = strtolower($type);
 
-        return Type::getType(match ($type) {
-            'biginteger' => 'bigint',
-            'smallinteger' => 'smallint',
-            'tinytext', 'mediumtext', 'longtext' => 'text',
-            'binary' => 'blob',
-            'uuid' => 'guid',
-            'char' => 'string',
-            'double' => 'float',
-            default => $type,
-        });
+        switch ($type) {
+            case 'biginteger':
+                $type = 'bigint';
+                break;
+            case 'smallinteger':
+                $type = 'smallint';
+                break;
+            case 'mediumtext':
+            case 'longtext':
+                $type = 'text';
+                break;
+            case 'binary':
+                $type = 'blob';
+                break;
+        }
+
+        return Type::getType($type);
     }
 
     /**
@@ -169,12 +168,14 @@ class ChangeColumn
      */
     protected static function calculateDoctrineTextLength($type)
     {
-        return match ($type) {
-            'tinyText' => 1,
-            'mediumText' => 65535 + 1,
-            'longText' => 16777215 + 1,
-            default => 255 + 1,
-        };
+        switch ($type) {
+            case 'mediumText':
+                return 65535 + 1;
+            case 'longText':
+                return 16777215 + 1;
+            default:
+                return 255 + 1;
+        }
     }
 
     /**
@@ -190,7 +191,6 @@ class ChangeColumn
             'binary',
             'boolean',
             'date',
-            'dateTime',
             'decimal',
             'double',
             'float',
@@ -199,7 +199,6 @@ class ChangeColumn
             'mediumInteger',
             'smallInteger',
             'time',
-            'timestamp',
             'tinyInteger',
         ]);
     }
@@ -212,13 +211,19 @@ class ChangeColumn
      */
     protected static function mapFluentOptionToDoctrine($attribute)
     {
-        return match ($attribute) {
-            'type', 'name' => null,
-            'nullable' => 'notnull',
-            'total' => 'precision',
-            'places' => 'scale',
-            default => $attribute,
-        };
+        switch ($attribute) {
+            case 'type':
+            case 'name':
+                return;
+            case 'nullable':
+                return 'notnull';
+            case 'total':
+                return 'precision';
+            case 'places':
+                return 'scale';
+            default:
+                return $attribute;
+        }
     }
 
     /**

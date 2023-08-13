@@ -3,6 +3,7 @@
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\API\TaskListController;
+use App\Http\Controllers\API\RegisterController;
 
 /*
 |--------------------------------------------------------------------------
@@ -15,11 +16,29 @@ use App\Http\Controllers\API\TaskListController;
 |
 */
 
-// Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
+//routes for auth by token (temporary disabled)
+// Route::middleware('auth:api')->get('/user', function (Request $request) {
 //     return $request->user();
 // });
 
-Route::get("getAllTasks", [TaskListController::class, "index"]);
-Route::get("getTasksByToken/{token}", [TaskListController::class, "getTasksByToken"]);
-Route::get("deleteTaskById/{taskId}", [TaskListController::class, "deleteTaskById"]);
-Route::put("addNewTask", [TaskListController::class, "addNewTask"]);
+// Route::post('register', [RegisterController::class, "register"]);
+// Route::post('login', [RegisterController::class, "login"]);
+
+// Route::middleware('auth:api')->group( function () {
+//     Route::get("getAllTasks", [TaskListController::class, "index"]);
+//     Route::get("getTasksByToken/{token}", [TaskListController::class, "getTasksByToken"]);
+//     Route::delete("deleteTask/{taskId}/{userToken}", [TaskListController::class, "deleteTask"]);
+//     Route::put("addNewTask", [TaskListController::class, "addNewTask"]);
+//     Route::post("updateTaskStatus", [TaskListController::class, "updateTaskStatus"]);
+//     Route::post("updateTaskPriority", [TaskListController::class, "updateTaskPriority"]);
+// });
+
+    //routes whithout auth
+    Route::get("getTasksByToken/{token}", [TaskListController::class, "getTasksByToken"]);
+    Route::delete("deleteTask/{taskId}/{userToken}", [TaskListController::class, "deleteTask"]);
+    Route::put("addNewTask", [TaskListController::class, "addNewTask"]);
+    Route::post("updateTaskStatus", [TaskListController::class, "updateTaskStatus"]);
+    Route::post("updateTaskPriority", [TaskListController::class, "updateTaskPriority"]);
+    Route::post("updateTaskTitle", [TaskListController::class, "updateTaskTitle"]);
+    Route::post("updateTaskDescription", [TaskListController::class, "updateTaskDescription"]);
+    
