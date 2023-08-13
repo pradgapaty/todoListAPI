@@ -41,4 +41,5 @@ use App\Http\Controllers\API\RegisterController;
     Route::post("updateTaskPriority", [TaskListController::class, "updateTaskPriority"]);
     Route::post("updateTaskTitle", [TaskListController::class, "updateTaskTitle"]);
     Route::post("updateTaskDescription", [TaskListController::class, "updateTaskDescription"]);
+    Route::post("multiUpdateTask", [TaskListController::class, "multiUpdateTask"]);
     

@@ -69,17 +69,6 @@
                             </div>
 
                             <div>
-                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">updateTaskStatus</h2>
-                                <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: POST</h3>
-                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    URL example: {server ip address}/api/updateTaskStatus?taskId={taskId}&userToken={userToken}&taskStatus={taskStatus}
-                                </p>
-                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Update task status. User can update status her task, New/In progress/Done. If user set status Done, after this he can't change status. Also automatically update field updatedAt.
-                                </p>
-                            </div>
-
-                            <div>
                                 <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">deleteTask</h2>
                                 <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: DELETE</h3>
                                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
@@ -87,6 +76,17 @@
                                 </p>
                                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
                                     Delete user task by task id and user token. User can't delete task with status Done.
+                                </p>
+                            </div>
+
+                            <div>
+                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">updateTaskStatus</h2>
+                                <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: POST</h3>
+                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    URL example: {server ip address}/api/updateTaskStatus?taskId={taskId}&userToken={userToken}&taskStatus={taskStatus}
+                                </p>
+                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    Update task status. User can update status her task, New/In progress/Done. If user set status Done, after this he can't change status. Also automatically update field updatedAt.
                                 </p>
                             </div>
 
@@ -113,15 +113,29 @@
                             </div>
 
                             <div>
-                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">updateTaskPriority</h2>
+                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">updateTaskDescription</h2>
                                 <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: POST</h3>
                                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    URL example: {server ip address}/api/updateTaskPriority?taskId={taskId}&userToken={userToken}&priority={priority}
+                                    URL example: {server ip address}/api/updateTaskDescription?taskId={taskId}&userToken={userToken}&description={description}
                                 </p>
                                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Changing task priority by task id and user token.
+                                    Changing task description by task id and user token. Maximum symbols for description is 255.
                                 </p>
                             </div>
+
+                            <div>
+                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">multiUpdateTask</h2>
+                                <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: POST</h3>
+                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    URL example: {server ip address}/api/multiUpdateTask?taskId={taskId}&userToken={userToken}&description={description}&title={title}&taskStatus={taskStatus}&priority={priority}
+                                </p>
+                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    User can edit all available tasks params with all previous methods rules.
+                                </p>
+                            </div>
+
+
+                            
                         </a>
                     </div>
                 </div>

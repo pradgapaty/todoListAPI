@@ -107,6 +107,49 @@ class TaskListController extends BaseController
     }
 
     /**
+     * Remove the specified resource from storage.
+     *
+     * @param int $taskId
+     * @return \Illuminate\Http\Response
+     */
+    public function deleteTask(string $taskId, string $userToken)
+    {
+        $result = 0;
+
+        if (!empty($taskId)) {
+            $resArr = TaskListModel::where("taskId", $taskId)->get()->toArray();
+
+            if (count($resArr) > 0) {
+                //user cannot delete other tasks
+                if ($resArr[0]["userToken"] === $userToken) {
+                    //user cannot delete task wit status "Done"
+                
+                    if (!empty($resArr[0]["status"]) && $resArr[0]["status"] === $this->getDoneTaskStatus()) {
+                        $response = $this->sendError("Task with id {" . $taskId . "} have status {" . $this->getDoneTaskStatus() . "} and cannot be deleted");
+                    } else {
+                        $taskForDelete = TaskListModel::where("taskId", $taskId);
+                        $result = $taskForDelete->delete();
+
+                        if ($result > 0) {
+                            $response = $this->sendResponse([], 'Task deleted successfully');
+                        } else {
+                            $response = $this->sendError('Cannot delete task...');
+                        }
+                    }
+                } else {
+                    $response = $this->sendError("You cannot delete tasks other users");
+                }
+            } else {
+                $response = $this->sendError("Task with id {" . $taskId . "} not founded");
+            }
+        } else {
+            $response = $this->sendError('Empty task id');
+        }
+
+        return $response;
+    }
+
+    /**
      * Update task status
      *
      * @param  \Illuminate\Http\Request  $request
@@ -166,49 +209,6 @@ class TaskListController extends BaseController
                     $response = $this->sendError("Task with id {" . $taskId . "} and userToken {" . $userToken . "} not founded...");
                 }
             }
-        }
-
-        return $response;
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param int $taskId
-     * @return \Illuminate\Http\Response
-     */
-    public function deleteTask(string $taskId, string $userToken)
-    {
-        $result = 0;
-
-        if (!empty($taskId)) {
-            $resArr = TaskListModel::where("taskId", $taskId)->get()->toArray();
-
-            if (count($resArr) > 0) {
-                //user cannot delete other tasks
-                if ($resArr[0]["userToken"] === $userToken) {
-                    //user cannot delete task wit status "Done"
-                
-                    if (!empty($resArr[0]["status"]) && $resArr[0]["status"] === $this->getDoneTaskStatus()) {
-                        $response = $this->sendError("Task with id {" . $taskId . "} have status {" . $this->getDoneTaskStatus() . "} and cannot be deleted");
-                    } else {
-                        $taskForDelete = TaskListModel::where("taskId", $taskId);
-                        $result = $taskForDelete->delete();
-
-                        if ($result > 0) {
-                            $response = $this->sendResponse([], 'Task deleted successfully');
-                        } else {
-                            $response = $this->sendError('Cannot delete task...');
-                        }
-                    }
-                } else {
-                    $response = $this->sendError("You cannot delete tasks other users");
-                }
-            } else {
-                $response = $this->sendError("Task with id {" . $taskId . "} not founded");
-            }
-        } else {
-            $response = $this->sendError('Empty task id');
         }
 
         return $response;
@@ -337,7 +337,7 @@ class TaskListController extends BaseController
 
         $validator = Validator::make($input, [
             'taskId' => 'required',
-            'description' => 'description',
+            'description' => 'required',
             'userToken' => 'required',
         ]);
 
@@ -373,6 +373,44 @@ class TaskListController extends BaseController
                 } else {
                     $response = $this->sendError("Task with id {" . $taskId . "} and userToken {" . $userToken . "} not founded...");
                 }
+            }
+        }
+
+        return $response;
+    }
+
+    /**
+     * Update all avaliable params
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function multiUpdateTask(Request $request)
+    {
+        $input = $request->all();
+
+        $validator = Validator::make($input, [
+            'taskId' => 'required',
+            'userToken' => 'required',
+        ]);
+
+        if ($validator->fails()){
+            $response = $this->sendError('Validation Error.', $validator->errors());       
+        } else {
+            if (isset($input["taskStatus"])) {
+                $response["taskStatus"] = $this->updateTaskStatus($request);
+            }
+
+            if (isset($input["priority"])) {
+                $response["priority"] = $this->updateTaskPriority($request);
+            }
+
+            if (isset($input["title"])) {
+                $response["title"] = $this->updateTaskTitle($request);
+            }
+
+            if (isset($input["description"])) {
+                $response["description"] = $this->updateTaskDescription($request);
             }
         }
 
