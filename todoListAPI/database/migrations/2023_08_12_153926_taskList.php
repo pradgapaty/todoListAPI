@@ -20,6 +20,7 @@ return new class extends Migration
             $table->string('description')->default("");
             $table->integer('createdAt')->default(0);
             $table->integer('completedAt')->default(0);
+            $table->integer("parrentlyTaskId")->default(0);
         });
     }
 

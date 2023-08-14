@@ -34,7 +34,7 @@ use App\Http\Controllers\API\RegisterController;
 // });
 
     //routes whithout auth
-    Route::get("getTasksByToken/{token}", [TaskListController::class, "getTasksByToken"]);
+    Route::post("getTasks", [TaskListController::class, "getTasks"]);
     Route::delete("deleteTask/{taskId}/{userToken}", [TaskListController::class, "deleteTask"]);
     Route::put("addNewTask", [TaskListController::class, "addNewTask"]);
     Route::post("updateTaskStatus", [TaskListController::class, "updateTaskStatus"]);
@@ -42,4 +42,6 @@ use App\Http\Controllers\API\RegisterController;
     Route::post("updateTaskTitle", [TaskListController::class, "updateTaskTitle"]);
     Route::post("updateTaskDescription", [TaskListController::class, "updateTaskDescription"]);
     Route::post("multiUpdateTask", [TaskListController::class, "multiUpdateTask"]);
+    Route::put("addSubTask", [TaskListController::class, "addSubTask"]);
+    Route::post("getSubTasks", [TaskListController::class, "getSubTasks"]);
     

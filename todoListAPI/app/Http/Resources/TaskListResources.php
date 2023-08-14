@@ -25,6 +25,7 @@ class TaskListResources extends JsonResource
             'description' => $this->description,
             'createdAt' => $this->createdAt,
             'completedAt' => $this->completedAt,
+            'parrentlyTaskId' => $this->parrentlyTaskId,
         ];
     }
 }

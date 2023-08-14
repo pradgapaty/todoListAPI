@@ -10,6 +10,7 @@ use App\Models\TaskListModel;
 use App\Http\Controllers\API\BaseController as BaseController;
 use App\Http\Resources\TaskListResources;
 use Validator;
+use Str;
 
 class TaskListController extends BaseController
 {
@@ -26,6 +27,12 @@ class TaskListController extends BaseController
         3,
         4,
         5,
+    ];
+
+    private $orderByList = [
+        "createdAt",
+        "completedAt",
+        "priority",
     ];
 
     private $titleMaxLenth = 100;
@@ -46,29 +53,116 @@ class TaskListController extends BaseController
     }
 
     /**
-     * Show tasks by user token
+     * Show user tasks
      *
      * @param string $token
      * @return \Illuminate\Http\JsonResponse
      */
-    public function getTasksByToken(string $token, Request $request)
+    public function getTasks(Request $request)
     {
-        var_dump($request->all());
-        $tasks = TaskListModel::where("userToken", $token)->limit(1000)->get();
-        $result = $this->sendError('Any tasks with token {' . $token . '} not found.');
+        //set default query limit
+        $limit = 1000;
 
-        if (count($tasks) > 0) {
-            //convert dateTime for createdAt field
-            foreach ($tasks as $taskKey => $taskValue) {
-                if (!empty($taskValue["createdAt"])) {
-                    $tasks[$taskKey]["createdAt"] = date("Y-m-d H:i:s", $taskValue["createdAt"]);
+        $fieldsForSearch = [
+            "taskId",
+            "status",
+            "priority",
+            "title",
+            "description",
+        ];
+        $input = $request->all();
+        $validator = Validator::make($input, [
+            'userToken' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            $response = $this->sendError("Validation Error", $validator->errors());       
+        } else {
+            $userToken = $input["userToken"];
+            $queryRes = TaskListModel::where("userToken", $userToken);
+
+            //filter by empty status and/or priority and/or title
+            if (isset($input["filterByEmptyStatus"])) {
+                $queryRes->where("status", "!=", "");
+            }
+
+            if (isset($input["filterByEmptyPriority"])) {
+                $queryRes->where("priority", "!=", 0);
+            }
+
+            if (isset($input["filterByEmptyTitle"])) {
+                $queryRes->where("title", "!=", "");
+            }
+
+            foreach ($input as $inputKey => $inputValue) {
+                if (in_array($inputKey, $fieldsForSearch)) {
+                    if ($inputKey === "title") {
+                        $queryRes->where($inputKey, "like", "%" . $inputValue . "%");
+                    } else {
+                        $queryRes->where($inputKey, $inputValue);
+                    }
                 }
             }
 
-            $result = $this->sendResponse(TaskListResources::collection($tasks));
+            if (!empty($input["orderBy"])) {
+                if (!in_array($input["orderBy"], $this->orderByList)) {
+                    return $this->sendError('Incorrect orderBy param. Avaliable params: {' . print_r($this->orderByList, true) . '}');
+                }
+                $queryRes->orderBy($input["orderBy"]);
+            }
+            $queryRes->limit($limit);
+            $tasks = $queryRes->get();
+
+            if (count($tasks) > 0) {
+                //convert dateTime for createdAt, completedAt fields
+                foreach ($tasks as $taskKey => $taskValue) {
+                    if (!empty($taskValue["createdAt"])) {
+                        $tasks[$taskKey]["createdAt"] = $this->unixtimeCorvert((int) $taskValue["createdAt"], "Y-m-d H:i:s");
+                        
+                    }
+                    if (!empty($taskValue["completedAt"])) {
+                        $tasks[$taskKey]["completedAt"] = $this->unixtimeCorvert((int) $taskValue["completedAt"], "Y-m-d H:i:s");
+                    }
+                }
+
+                $response = $this->sendResponse(TaskListResources::collection($tasks), "Founded {" . count($tasks) . "} tasks");
+            } else {
+                $response = $this->sendError("Cannot find any tasks by input params");
+            }
         }
 
-        return $result;
+        return $response;
+    }
+
+    /**
+     * Show user tasks
+     *
+     * @param string $token
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function getSubTasks(Request $request)
+    {
+        $input = $request->all();
+        $validator = Validator::make($input, [
+            'taskId' => 'required',
+            'userToken' => 'required',
+        ]);
+
+        if ($validator->fails()) {
+            $response = $this->sendError("Validation Error", $validator->errors());       
+        } else {
+            $taskId = (int) $input["taskId"];
+            $userToken = $input["userToken"];
+            $subTasks = $this->getUserSubTasks($taskId, $userToken);
+
+            if (count($subTasks) > 0) {
+                $response = $this->sendResponse(TaskListResources::collection($subTasks), "Founded {" . count($subTasks) . "} subtasks");
+            } else {
+                $response = $this->sendError("Cannot find any subtasks by input params");
+            }
+        }
+
+        return $response;
     }
 
     /**
@@ -79,31 +173,79 @@ class TaskListController extends BaseController
      */
     public function addNewTask(Request $request)
     {
-        $taskId = 0;
+        $tokenParamExist = true;
         $input = $request->all();
-        $message = "";
 
-        //set token, when user used API firstly
+        //set token, if user used API firstly
         if (empty($input["userToken"])) {
             $input["userToken"] = md5(uniqid());
-            $message = "Warning! For show, edit and delete yours tasks - save your token (identification): " . $input["userToken"];
+            $tokenParamExist = false;
         }
 
         //set default values
         $input["createdAt"] = time();
         $input["completedAt"] = 0;
 
-        TaskListModel::create($input);
-        $res = TaskListModel::where("userToken", $input["userToken"])->limit(1)->orderBy('createdAt', 'desc')->get()->toArray();
+        $insertId = TaskListModel::insertGetId($input);
 
-        if (!empty($res[0]["taskId"])) {
-            $taskId = $res[0]["taskId"];
-            $message = "Your taskId is {" . $taskId . "}";
+        if ($tokenParamExist) {
+            $response = $this->sendResponse(["taskId" => $insertId], 'Task created successfully');
+        } else {
+            $response = $this->sendResponse(["taskId" => $insertId, "userToken" => $input["userToken"]], "Warning! For show, edit and delete yours tasks - save your token (identification)");
         }
 
-        $result = $this->sendResponse($message);
+        return $response;
+    }
 
-        return $result;
+    /**
+     * Add subtask
+     *
+     * @param  \Illuminate\Http\Request  $request
+     * @return \Illuminate\Http\Response
+     */
+    public function addSubTask(Request $request)
+    {
+        $taskId = 0;
+        $input = $request->all();
+
+        $validator = Validator::make($input, [
+            'taskId' => 'required',
+            'userToken' => 'required',
+        ]);
+
+        if ($validator->fails()){
+            $response = $this->sendError('Validation Error.', $validator->errors());       
+        } else {
+            $taskId = $input["taskId"];
+            $userToken = $input["userToken"];
+
+            $resArr = TaskListModel::where("taskId", $taskId)->get()->toArray();
+
+            if (count($resArr) > 0) {
+                if ($resArr[0]["userToken"] === $userToken) {
+                    if (!empty($resArr[0]["parrentlyTaskId"])) {
+                        $response = $this->sendError("Task with id {" . $taskId . "} already is subtask. You cannot add subtask for subtask");
+                    } else {
+                        //set default values
+                        $input["createdAt"] = time();
+                        $input["completedAt"] = 0;
+                        $input["parrentlyTaskId"] = (int) $taskId;
+
+                        //remove taskId key before insert
+                        unset($input["taskId"]);
+                        $insertId = TaskListModel::insertGetId($input);
+                        $response = $this->sendResponse(["subtaskId" => $insertId], 'Subtask created Successfully');
+                    }
+
+                } else {
+                    $response = $this->sendError("You cannot add subtask for tasks other users");
+                }
+            } else {
+                $response = $this->sendError("Task with id {" . $taskId . "} not founded. Cannot create subtask");
+            }
+        }
+
+        return $response;
     }
 
     /**
@@ -114,6 +256,7 @@ class TaskListController extends BaseController
      */
     public function deleteTask(string $taskId, string $userToken)
     {
+        //TODO: add autodelete subtasks
         $result = 0;
 
         if (!empty($taskId)) {
@@ -122,8 +265,7 @@ class TaskListController extends BaseController
             if (count($resArr) > 0) {
                 //user cannot delete other tasks
                 if ($resArr[0]["userToken"] === $userToken) {
-                    //user cannot delete task wit status "Done"
-                
+                    //user cannot delete task with status "Done"
                     if (!empty($resArr[0]["status"]) && $resArr[0]["status"] === $this->getDoneTaskStatus()) {
                         $response = $this->sendError("Task with id {" . $taskId . "} have status {" . $this->getDoneTaskStatus() . "} and cannot be deleted");
                     } else {
@@ -168,7 +310,7 @@ class TaskListController extends BaseController
         if ($validator->fails()){
             $response = $this->sendError('Validation Error.', $validator->errors());       
         } else {
-            $taskId = $input["taskId"];
+            $taskId = (int) $input["taskId"];
             $taskStatus = $input["taskStatus"];
             $userToken = $input["userToken"];
 
@@ -178,7 +320,7 @@ class TaskListController extends BaseController
                 $res = TaskListModel::where("taskId", $taskId)->get()->toArray();
 
                 if (count($res) > 0) {
-                    //additional function, user cannot change task status if status is Done (because after status is changed the he can delete task)
+                    //additional function, user cannot change task status if status is Done (because after status is changed he can delete task)
                     $statusinDb = $res[0]["status"];
 
                     if ($statusinDb === $this->getDoneTaskStatus()) {
@@ -186,19 +328,40 @@ class TaskListController extends BaseController
                     } else {
                         //user cannot modify other tasks
                         if ($res[0]["userToken"] === $userToken) {
-                            $result = TaskListModel::where("taskId", $taskId)->update(["status" => $taskStatus]);
-                            
-                            if ($result > 0) {
-                                //update completedAt if status changed to Done
-                                if ($taskStatus === $this->getDoneTaskStatus()) {
-                                    TaskListModel::where("taskId", $taskId)->update(["completedAt" => time()]);;
+                            $subTaskMarker = 0;
+                            //user cannot update status "Done" if task have subtasks with statuses not "Done"
+                            if ($taskStatus === $this->getDoneTaskStatus()) {
+                                $subTasks = $this->getUserSubTasks($taskId, $userToken)->toArray();
+    
+                                if (!empty($subTasks)) {
+                                    foreach ($subTasks as $taskKey => $task) {
+                                        if ($task["status"] != $this->getDoneTaskStatus()) {
+                                            $subTaskMarker = 1;
+                                            break;
+                                        }
+                                    }
+    
+                                    if ($subTaskMarker > 0) {
+                                        $response = $this->sendError("User cannot change status to {" . $this->getDoneTaskStatus() . "} if have subtasks with status not {" . $this->getDoneTaskStatus() . "}");
+                                    }
                                 }
-                                $response = $this->sendResponse([], 'Task Updated Successfully.');
-                            } else {
-                                $res = TaskListModel::where("taskId", $taskId)->where("userToken", $userToken)->get()->toArray();
-        
-                                if (!empty($res[0]["status"]) && $res[0]["status"] === $taskStatus) {
-                                    $response = $this->sendError("Task with id {" . $taskId . "} already have status {" . $taskStatus . "}");
+                            }
+
+                            if ($subTaskMarker === 0) {
+                                $result = TaskListModel::where("taskId", $taskId)->update(["status" => $taskStatus]);
+                            
+                                if ($result > 0) {
+                                    //update completedAt if status changed to Done
+                                    if ($taskStatus === $this->getDoneTaskStatus()) {
+                                        TaskListModel::where("taskId", $taskId)->update(["completedAt" => time()]);;
+                                    }
+                                    $response = $this->sendResponse([], 'Task Updated Successfully.');
+                                } else {
+                                    $res = TaskListModel::where("taskId", $taskId)->where("userToken", $userToken)->get()->toArray();
+            
+                                    if (!empty($res[0]["status"]) && $res[0]["status"] === $taskStatus) {
+                                        $response = $this->sendError("Task with id {" . $taskId . "} already have status {" . $taskStatus . "}");
+                                    }
                                 }
                             }
                         } else {
@@ -416,4 +579,51 @@ class TaskListController extends BaseController
 
         return $response;
     }
+
+    /**
+     * Convert unixtime to datetime format
+     *
+     * @param int $unixtime
+     * @param string $format
+     * @return string $dateTime
+     */
+    
+    private function unixtimeCorvert(int $unixtime, string $format): string
+    {
+        $dateTime = "";
+
+        if (!empty($unixtime) && !empty($format)) {
+            $dateTime = date($format, $unixtime);
+        }
+
+        return $dateTime;
+    }
+
+    /**
+     * Get user subtasks
+     *
+     * @param int $taskId
+     * @param int $taskId
+     * @return \Illuminate\Database\Eloquent\Collection $subTasks
+     */
+    
+     private function getUserSubTasks(int $taskId, string $userToken): \Illuminate\Database\Eloquent\Collection
+     {
+        $subTasks = [];
+
+        if (!empty($taskId) ) {
+            $subTasks = TaskListModel::where("parrentlyTaskId", $taskId)->where("userToken", $userToken)->get();
+
+            foreach ($subTasks as $taskKey => $taskValue) {
+                if (!empty($taskValue["createdAt"])) {
+                    $subTasks[$taskKey]["createdAt"] = $this->unixtimeCorvert((int) $taskValue["createdAt"], "Y-m-d H:i:s");
+                }
+                if (!empty($taskValue["completedAt"])) {
+                    $subTasks[$taskKey]["completedAt"] = $this->unixtimeCorvert((int) $taskValue["completedAt"], "Y-m-d H:i:s");
+                }
+            }
+        }
+ 
+         return $subTasks;
+     }
 }

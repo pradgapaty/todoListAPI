@@ -7,10 +7,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
+
 class TaskListModel extends Model
 {
     use HasFactory;
 
+    protected $primaryKey = 'taskId';
     public $timestamps = false;
     protected $table = "taskList";
     protected $fillable = [
@@ -22,5 +24,6 @@ class TaskListModel extends Model
         'description',
         'completedAt',
         "createdAt",
+        "parrentlyTaskId",
     ];
 }

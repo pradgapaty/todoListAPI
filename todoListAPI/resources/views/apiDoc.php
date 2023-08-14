@@ -58,13 +58,14 @@
                             </div>
 
                             <div>
-                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">getTasksByToken</h2>
-                                <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: GET</h3>
+                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">getTasks</h2>
+                                <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: POST</h3>
                                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    URL example: {server ip address}/api/getTasksByToken/{userToken}
+                                    URL example: {server ip address}/api/getTasks?userToken={userToken}&filterByEmptyStatus=1&filterByEmptyPriority=1&filterByEmptyTitle=1&orderBy={orderParam}&status={status}&taskId={taskId}&title={title}&priority={priority}&description={description}
                                 </p>
                                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Get user tasks by token
+                                    Get user tasks. Token is required param. User can filter data by empty status, priority or title, 
+                                    order data by createdAt or completedAt or priority. Get task info by taskId, status, priority, title (text search), description.
                                 </p>
                             </div>
 
@@ -86,7 +87,9 @@
                                     URL example: {server ip address}/api/updateTaskStatus?taskId={taskId}&userToken={userToken}&taskStatus={taskStatus}
                                 </p>
                                 <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
-                                    Update task status. User can update status her task, New/In progress/Done. If user set status Done, after this he can't change status. Also automatically update field updatedAt.
+                                    Update task status. User can update status her task, New/In progress/Done. If user set status Done, after this he can't change status. 
+                                    Also automatically update field updatedAt. 
+                                    User cannot update status "Done" for main task if her any subtask have status not "Done".
                                 </p>
                             </div>
 
@@ -134,8 +137,16 @@
                                 </p>
                             </div>
 
-
-                            
+                            <div>
+                                <h2 class="mt-6 text-xl font-semibold text-gray-900 dark:text-white">addSubTask</h2>
+                                <h3 class="mt-5 text-xxl text-gray-900 dark:text-white">Method: PUT</h3>
+                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    URL example: {server ip address}/api/addSubTask?taskId={taskId}&userToken={userToken}&description={description}&title={title}&taskStatus={taskStatus}&priority={priority}
+                                </p>
+                                <p class="mt-4 text-gray-500 dark:text-gray-400 text-sm leading-relaxed">
+                                    User can add subtasks for main task.
+                                </p>
+                            </div>
                         </a>
                     </div>
                 </div>
